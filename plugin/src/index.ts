@@ -40,6 +40,10 @@ export const AlmadelPlugin: Plugin = async (input: PluginInput) => {
   const directory = input.directory;
   const cfg = loadConfig(directory);
 
+  function logVerbose(msg: string) {
+    if (cfg.verbose) log(msg);
+  }
+
   const state = createState();
   const http = new AlmadelClient(cfg.serverUrl);
   let pipeline: EventPipeline | null = null;
@@ -119,7 +123,7 @@ export const AlmadelPlugin: Plugin = async (input: PluginInput) => {
       path: { id: sessionId },
       body: { parts: [{ type: "text", text: prompt }] },
     });
-    log(`dispatched ${ticket} on branch ${branch} -> session ${sessionId}`);
+    logVerbose(`dispatched ${ticket} on branch ${branch} -> session ${sessionId}`);
   }
 
   async function onReply(ticket: string, text: string) {
@@ -183,6 +187,7 @@ export const AlmadelPlugin: Plugin = async (input: PluginInput) => {
       state,
       git: realGit,
       log,
+      logVerbose,
       dispatchPrompt,
       onReply,
       onCancel,

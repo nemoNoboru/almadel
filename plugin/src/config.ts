@@ -10,6 +10,7 @@ export interface AlmadelConfig {
   label: string;
   opencodeVersion: string;
   token: string | null;
+  verbose: boolean;
 }
 
 function run(cmd: string, args: string[], cwd: string): string | null {
@@ -49,6 +50,7 @@ export function loadConfig(
 
   const label = env.ALMADEL_LABEL ?? env.HOSTNAME ?? "default";
   const opencodeVersion = env.OPENCODE_VERSION ?? "0.0.0";
+  const verbose = env.ALMADEL_VERBOSE === "1" || env.ALMADEL_VERBOSE === "true";
 
   return {
     serverUrl,
@@ -59,6 +61,7 @@ export function loadConfig(
     label,
     opencodeVersion,
     token,
+    verbose,
   };
 }
 

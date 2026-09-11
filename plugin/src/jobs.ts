@@ -11,6 +11,7 @@ export interface JobContext {
   state: AlmadelState;
   git: GitRunner;
   log: (msg: string) => void;
+  logVerbose: (msg: string) => void;
   /** Called with a task prompt to dispatch into a session. */
   dispatchPrompt: (prompt: string, ticket: string, branch: string) => Promise<void>;
   /** Called when a cancel job arrives. */
@@ -54,7 +55,7 @@ export async function pollLoop(ctx: JobContext): Promise<void> {
 export async function dispatch(ctx: JobContext, job: Job): Promise<void> {
   // Direct messages carry no ticket; handle them before the ticket-scoped paths.
   if (job.type === "message") {
-    ctx.log("job: message");
+    ctx.logVerbose("job: message");
     if (job.project !== ctx.config.project) {
       ctx.log(`project mismatch: job=${job.project} ours=${ctx.config.project} — refusing`);
       return;
@@ -63,7 +64,7 @@ export async function dispatch(ctx: JobContext, job: Job): Promise<void> {
     return;
   }
 
-  ctx.log(`job: ${job.type} ticket=${job.ticket}`);
+  ctx.logVerbose(`job: ${job.type} ticket=${job.ticket}`);
 
   // Projects are a namespace: verify on every job before touching anything.
   if (job.project !== ctx.config.project) {
