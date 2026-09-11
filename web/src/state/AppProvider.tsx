@@ -149,6 +149,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (e.type === "roster") {
         refreshRoster()
         if (selectedProjectRef.current) refreshBoard(selectedProjectRef.current)
+        if (selectedTicketRef.current) refreshThread(selectedTicketRef.current)
       } else if (e.type === "board") {
         if (selectedProjectRef.current === e.project_id) {
           refreshBoard(e.project_id)

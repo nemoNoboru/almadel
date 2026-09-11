@@ -2,7 +2,16 @@ import type { Config } from "../config"
 import type { DB } from "../db"
 import { newId, now } from "../db"
 import { HttpError, zodIssues } from "../http-error"
-import { agentJobs, addRosterSub, addTicketSub, projectClaim, removeRosterSub, removeTicketSub } from "../notify"
+import {
+  addRosterSub,
+  addTicketSub,
+  agentJobs,
+  broadcastRoster,
+  broadcastTicket,
+  projectClaim,
+  removeRosterSub,
+  removeTicketSub,
+} from "../notify"
 import type { Agent, Ticket } from "../types"
 import {
   askSchema,
@@ -404,6 +413,8 @@ async function handleComment(db: DB, request: Request, ticketId: string, body: u
   const parsed = commentSchema.safeParse(body)
   if (!parsed.success) return error(400, "invalid comment", zodIssues(parsed.error))
   addComment(db, ticketId, "agent", parsed.data.kind, parsed.data.body ?? null)
+  broadcastTicket(ticketId, "{}")
+  broadcastRoster()
   return noContent()
 }
 
@@ -454,5 +465,6 @@ async function handlePutColumns(db: DB, projectId: string, body: unknown): Promi
     })
   })()
 
+  broadcastRoster()
   return json(listColumns(db, projectId))
 }
