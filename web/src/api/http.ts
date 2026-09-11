@@ -126,7 +126,7 @@ export class HttpClient implements AlmadelClient {
 
   async updateColumns(
     projectId: string,
-    columns: Array<Partial<{ id: string; name: string; prompt: string | null; next_column: string | null; fail_column: string | null; wip_limit: number | null }>>,
+    columns: Array<Partial<{ id: string; name: string; prompt: string | null; model: string | null; next_column: string | null; fail_column: string | null; wip_limit: number | null }>>,
   ) {
     await request(`/api/projects/${projectId}/columns`, {
       method: "PUT",

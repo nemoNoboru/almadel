@@ -129,6 +129,7 @@ export async function makeAlmadelTools(deps: ToolDeps) {
         await returnToRepoRoot(deps.git, deps.repoRoot);
         state.currentWorktree = null;
         state.currentTicket = null;
+        state.currentModel = null;
         state.status = "idle";
         return "ticket moved; stage complete";
       },

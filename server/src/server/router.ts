@@ -463,10 +463,10 @@ async function handlePutColumns(db: DB, projectId: string, body: unknown): Promi
   db.transaction(() => {
     db.query("DELETE FROM columns WHERE project_id = ?").run(projectId)
     const insert = db.query(
-      "INSERT INTO columns (id, project_id, name, position, prompt, next_column, fail_column, wip_limit) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO columns (id, project_id, name, position, prompt, model, next_column, fail_column, wip_limit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     columns.forEach((c, i) => {
-      insert.run(c.id ?? newId("col"), projectId, c.name, i, c.prompt, c.next_column, c.fail_column, c.wip_limit)
+      insert.run(c.id ?? newId("col"), projectId, c.name, i, c.prompt, c.model, c.next_column, c.fail_column, c.wip_limit)
     })
   })()
 

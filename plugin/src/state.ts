@@ -25,6 +25,7 @@ export interface AlmadelState {
   token: string | null;
   currentTicket: string | null;
   currentSession: string | null;
+  currentModel: string | null;
   currentWorktree: string | null;
   status: AgentStatus;
   board: Board | null;
@@ -41,6 +42,7 @@ export function createState(): AlmadelState {
     token: null,
     currentTicket: null,
     currentSession: null,
+    currentModel: null,
     currentWorktree: null,
     status: "idle",
     board: null,

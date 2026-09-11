@@ -140,6 +140,9 @@ CREATE INDEX idx_messages_agent ON messages(agent_id, created_at);
 `
 ALTER TABLE comments ADD COLUMN updated_at INTEGER;
 `,
+`
+ALTER TABLE columns ADD COLUMN model TEXT;
+`,
 ]
 
 export function openDb(path: string): Database {
@@ -295,6 +298,7 @@ export function mapColumn(row: Record<string, unknown> | null | undefined): Colu
     name: row.name as string,
     position: (row.position as number) ?? 0,
     prompt: (row.prompt as string | null) ?? null,
+    model: (row.model as string | null) ?? null,
     next_column: (row.next_column as string | null) ?? null,
     fail_column: (row.fail_column as string | null) ?? null,
     wip_limit: (row.wip_limit as number | null) ?? null,

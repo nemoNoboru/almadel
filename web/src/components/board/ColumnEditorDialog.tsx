@@ -37,6 +37,7 @@ interface Draft {
   id: string
   name: string
   prompt: string
+  model: string
   next_column: string
   fail_column: string
   wip_limit: string
@@ -68,6 +69,7 @@ function toDraft(c: Column): Draft {
     id: c.id,
     name: c.name,
     prompt: c.prompt ?? "",
+    model: c.model ?? "",
     next_column: c.next_column ?? "",
     fail_column: c.fail_column ?? "",
     wip_limit: c.wip_limit?.toString() ?? "",
@@ -132,6 +134,7 @@ export function ColumnEditorDialog({
       id: `new-${Date.now()}`,
       name: "",
       prompt: "",
+      model: "",
       next_column: "",
       fail_column: "",
       wip_limit: "",
@@ -150,6 +153,7 @@ export function ColumnEditorDialog({
           id: d.id.startsWith("new-") ? undefined : d.id,
           name: d.name || `Column ${i + 1}`,
           prompt: d.prompt.trim() || null,
+          model: d.model.trim() || null,
           next_column: d.next_column || null,
           fail_column: d.fail_column || null,
           wip_limit: d.wip_limit ? Number(d.wip_limit) : null,
@@ -321,6 +325,19 @@ function ColumnFields({
             {renderPrompt(draft.prompt)}
           </pre>
         )}
+      </Field>
+
+      <Field>
+        <FieldLabel htmlFor={`model-${draft.id}`}>Model</FieldLabel>
+        <Input
+          id={`model-${draft.id}`}
+          value={draft.model}
+          onChange={(e) => onChange({ model: e.target.value })}
+          placeholder="provider/model"
+        />
+        <FieldDescription>
+          Pin an opencode model (e.g. <code>anthropic/claude-opus-4-1</code>); leave empty to use the slot's default.
+        </FieldDescription>
       </Field>
 
       <div className="grid grid-cols-3 gap-2">

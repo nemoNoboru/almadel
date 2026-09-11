@@ -278,6 +278,7 @@ class Store {
       name: input.name ?? "Column",
       position: i,
       prompt: input.prompt ?? null,
+      model: input.model ?? null,
       next_column: input.next_column ?? null,
       fail_column: input.fail_column ?? null,
       wip_limit: input.wip_limit ?? null,

@@ -46,6 +46,7 @@ export const ColumnSchema = z.object({
   project_id: z.string(),
   name: z.string(),
   prompt: z.string().nullable(),
+  model: z.string().nullable(),
   position: z.number(),
 });
 export type Column = z.infer<typeof ColumnSchema>;
@@ -136,6 +137,7 @@ export const TaskJobSchema = z.object({
   ticket: z.string(),
   prompt: z.string(),
   branch: z.string(),
+  model: z.string().nullable(),
 });
 
 export const ReplyJobSchema = z.object({
