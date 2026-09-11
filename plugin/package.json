@@ -1,0 +1,28 @@
+{
+  "name": "@almadel/opencode-plugin",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Almadel worker plugin: turns an opencode instance into a board agent that dials out to the Almadel server.",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": ">=1.14.24"
+  },
+  "dependencies": {
+    "zod": "^4.1.8"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "1.14.24",
+    "@types/bun": "^1.2.0",
+    "typescript": "^5.8.0"
+  }
+}

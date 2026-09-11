@@ -1,0 +1,32 @@
+{
+  "name": "almadel",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "description": "Self-hosted control plane for coding agents — server, UI, SQLite, CLI.",
+  "bin": {
+    "almadel": "src/cli.ts"
+  },
+  "files": [
+    "src",
+    "ui"
+  ],
+  "engines": {
+    "bun": ">=1.1"
+  },
+  "scripts": {
+    "start": "bun run src/cli.ts",
+    "dev": "bun --watch run src/cli.ts",
+    "build:ui": "bun run scripts/build-ui.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0",
+    "typescript": "^5.8.0"
+  }
+}
