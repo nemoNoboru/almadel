@@ -134,7 +134,7 @@ export function Board() {
   }
 
   return (
-    <section className="flex min-w-0 flex-1 flex-col">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="flex h-10 shrink-0 items-center justify-between px-3">
         <span className="text-sm text-muted-foreground">
           {board.project.name}
@@ -149,7 +149,7 @@ export function Board() {
         </Button>
       </div>
 
-      <ScrollArea className="flex-1">
+      <ScrollArea className="min-h-0 flex-1">
         <div className="flex h-full items-start gap-2 px-3 pb-3">
           {board.columns.map((column) => (
             <Column

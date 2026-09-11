@@ -54,7 +54,7 @@ export function ConversationPanel() {
 
   if (!selectedTicketId) {
     return (
-      <aside className="flex w-96 shrink-0 flex-col border-l">
+      <aside className="flex min-h-0 w-96 shrink-0 flex-col border-l">
         <div className="flex flex-1 items-center justify-center p-6">
           <Empty>
             <EmptyMedia variant="icon">
@@ -73,7 +73,7 @@ export function ConversationPanel() {
 
   if (loadingThread && !thread) {
     return (
-      <aside className="flex w-96 shrink-0 flex-col gap-2 border-l p-3">
+      <aside className="flex min-h-0 w-96 shrink-0 flex-col gap-2 border-l p-3">
         <Skeleton className="h-6 w-2/3" />
         <Skeleton className="h-40 w-full" />
         <Skeleton className="h-10 w-full" />
@@ -83,7 +83,7 @@ export function ConversationPanel() {
 
   if (!thread) {
     return (
-      <aside className="flex w-96 shrink-0 flex-col border-l">
+      <aside className="flex min-h-0 w-96 shrink-0 flex-col border-l">
         <div className="flex flex-1 items-center justify-center p-6">
           <Empty>
             <EmptyTitle>Ticket not found</EmptyTitle>
@@ -100,7 +100,7 @@ export function ConversationPanel() {
   const blocked = isBlocked(ticket.state)
 
   return (
-    <aside className="flex w-96 shrink-0 flex-col border-l">
+    <aside className="flex min-h-0 w-96 shrink-0 flex-col border-l">
       <div className="flex items-center gap-2 border-b px-3 py-2">
         <div className="flex min-w-0 flex-col">
           <div className="flex items-center gap-2">
@@ -131,7 +131,7 @@ export function ConversationPanel() {
         </Button>
       </div>
 
-      <ScrollArea className="flex-1">
+      <ScrollArea className="min-h-0 flex-1">
         <div className="flex flex-col gap-3 p-3">
           {agent && !agent.online && (
             <Alert className="text-xs">
