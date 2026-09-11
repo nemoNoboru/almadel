@@ -67,6 +67,7 @@ export interface AlmadelClient {
   draftTicket(input: DraftTicketInput): Promise<TicketDraft>
   moveTicket(ticketId: string, input: MoveTicketInput): Promise<void>
   reply(ticketId: string, body: string): Promise<void>
+  updateComment(ticketId: string, commentId: number, body: string): Promise<void>
   decidePermission(
     ticketId: string,
     decision: PermissionDecision,

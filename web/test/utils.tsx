@@ -138,6 +138,7 @@ export function makeComment(overrides: Partial<Comment> = {}): Comment {
     kind: "question",
     body: "Which backend?",
     created_at: 1,
+    updated_at: null,
     ...overrides,
   }
 }
@@ -187,6 +188,7 @@ export function makeState(overrides: Partial<AppState> = {}): AppState {
     moveTicket: async () => {},
     createTicket: async () => {},
     reply: async () => {},
+    updateComment: async () => {},
     decidePermission: async () => {},
     cancel: async () => {},
     takeover: async () => {},

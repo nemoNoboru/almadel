@@ -50,6 +50,7 @@ export interface AppState {
     column_id: string
   }) => Promise<void>
   reply: (ticketId: string, body: string) => Promise<void>
+  updateComment: (ticketId: string, commentId: number, body: string) => Promise<void>
   decidePermission: (
     ticketId: string,
     decision: "allow" | "deny",
@@ -276,6 +277,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [refreshThread, refreshRoster],
   )
 
+  const updateComment = useCallback(
+    async (ticketId: string, commentId: number, body: string) => {
+      await client.updateComment(ticketId, commentId, body)
+      if (selectedTicketRef.current === ticketId) refreshThread(ticketId)
+    },
+    [refreshThread],
+  )
+
   const decidePermission = useCallback(
     async (
       ticketId: string,
@@ -342,6 +351,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       moveTicket,
       createTicket,
       reply,
+      updateComment,
       decidePermission,
       cancel,
       takeover,
@@ -370,6 +380,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       moveTicket,
       createTicket,
       reply,
+      updateComment,
       decidePermission,
       cancel,
       takeover,

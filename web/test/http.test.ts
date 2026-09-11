@@ -109,6 +109,23 @@ describe("HttpClient", () => {
     expect(body).toContain("hello")
   })
 
+  test("updateComment uses PATCH on the comment endpoint", async () => {
+    let method = ""
+    let url = ""
+    let body = ""
+    globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
+      url = String(input)
+      method = init?.method ?? "GET"
+      body = String(init?.body)
+      return jsonResponse(204, null)
+    }) as FetchFn
+    const client = new HttpClient()
+    await client.updateComment("TCK-1", 42, "fixed")
+    expect(method).toBe("PATCH")
+    expect(url).toBe("/api/tickets/TCK-1/comments/42")
+    expect(body).toContain("fixed")
+  })
+
   test("draftTicket posts and returns the draft", async () => {
     globalThis.fetch = (async () =>
       jsonResponse(200, { title: "T", body: "B", agent_name: "Alimiel" })) as FetchFn

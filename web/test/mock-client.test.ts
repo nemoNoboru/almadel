@@ -67,6 +67,22 @@ describe("MockClient mutations", () => {
     expect(thread.ticket.state).toBe("running")
   })
 
+  test("updateComment edits a non-system comment", async () => {
+    const client = new MockClient()
+    await client.updateComment("TCK-412", 2, "revised plan")
+    const thread = await client.getTicketThread("TCK-412")
+    const comment = thread.comments.find((c) => c.id === 2)
+    expect(comment?.body).toBe("revised plan")
+    expect(comment?.updated_at).toBeGreaterThan(0)
+  })
+
+  test("updateComment rejects system comments", async () => {
+    const client = new MockClient()
+    await expect(client.updateComment("TCK-412", 1, "nope")).rejects.toThrow(
+      "system comments are not editable",
+    )
+  })
+
   test("decidePermission / cancel / takeover resolve", async () => {
     const client = new MockClient()
     await expect(client.cancelTicket("TCK-412")).resolves.toBeUndefined()

@@ -9,6 +9,7 @@ import {
   claimBodySchema,
   columnsPutSchema,
   commentSchema,
+  commentUpdateSchema,
   createTicketSchema,
   draftSchema,
   eventBatchSchema,
@@ -43,6 +44,7 @@ import {
   listProjects,
   moveTicket,
   takeoverTicket,
+  updateComment,
 } from "../domain/tickets"
 import { hasBearer, resolveBearer } from "./auth"
 import { createSSE } from "./sse"
@@ -208,6 +210,11 @@ export async function handleApi(
     }
     if (method === "POST" && path === "/api/tickets/draft") {
       return await handleDraft(db, await readJson(request))
+    }
+
+    const commentUpdateMatch = method === "PATCH" && /^\/api\/tickets\/([^/]+)\/comments\/([^/]+)$/.exec(path)
+    if (commentUpdateMatch) {
+      return await handleUpdateComment(db, commentUpdateMatch[1]!, commentUpdateMatch[2]!, await readJson(request))
     }
 
     // ---- ticket sub-routes -------------------------------------------------
@@ -404,6 +411,15 @@ async function handleComment(db: DB, request: Request, ticketId: string, body: u
   const parsed = commentSchema.safeParse(body)
   if (!parsed.success) return error(400, "invalid comment", zodIssues(parsed.error))
   addComment(db, ticketId, "agent", parsed.data.kind, parsed.data.body ?? null)
+  return noContent()
+}
+
+async function handleUpdateComment(db: DB, ticketId: string, commentIdRaw: string, body: unknown): Promise<Response> {
+  const parsed = commentUpdateSchema.safeParse(body)
+  if (!parsed.success) return error(400, "invalid comment", zodIssues(parsed.error))
+  const commentId = Number.parseInt(commentIdRaw, 10)
+  if (!Number.isFinite(commentId)) return error(404, "comment not found")
+  updateComment(db, ticketId, commentId, parsed.data.body)
   return noContent()
 }
 

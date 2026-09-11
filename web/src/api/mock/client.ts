@@ -163,6 +163,12 @@ export class MockClient implements AlmadelClient {
     this.broadcastRoster()
   }
 
+  async updateComment(ticketId: string, commentId: number, body: string) {
+    await delay()
+    this.store.updateComment(ticketId, commentId, body)
+    this.broadcastTicket(ticketId)
+  }
+
   async decidePermission(
     ticketId: string,
     decision: "allow" | "deny",

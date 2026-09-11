@@ -137,6 +137,9 @@ CREATE TABLE messages (
 );
 CREATE INDEX idx_messages_agent ON messages(agent_id, created_at);
 `,
+`
+ALTER TABLE comments ADD COLUMN updated_at INTEGER;
+`,
 ]
 
 export function openDb(path: string): Database {
@@ -307,5 +310,6 @@ export function mapComment(row: Record<string, unknown> | null | undefined): Com
     kind: row.kind as Comment["kind"],
     body: (row.body as string | null) ?? null,
     created_at: (row.created_at as number) ?? 0,
+    updated_at: (row.updated_at as number | null) ?? null,
   }
 }

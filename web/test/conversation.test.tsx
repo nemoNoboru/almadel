@@ -34,7 +34,7 @@ describe("ConversationPanel — thread", () => {
   test("renders a plan comment with a plan label", () => {
     const thread = makeThread({
       ticket: makeThread().ticket,
-      comments: [{ id: 1, ticket_id: "TCK-3", author: "agent", kind: "plan", body: "# Plan", created_at: 1 }],
+      comments: [{ id: 1, ticket_id: "TCK-3", author: "agent", kind: "plan", body: "# Plan", created_at: 1, updated_at: null }],
     })
     renderWithApp(<ConversationPanel />, makeState({ selectedTicketId: "TCK-3", thread }))
     expect(screen.getByText("plan")).toBeInTheDocument()
@@ -241,10 +241,53 @@ describe("ConversationPanel — permissions and actions", () => {
       ticket: makeThread().ticket,
       question: null,
       comments: [
-        { id: 1, ticket_id: "TCK-3", author: "system", kind: "move", body: "moved to Done", created_at: 1 },
+        { id: 1, ticket_id: "TCK-3", author: "system", kind: "move", body: "moved to Done", created_at: 1, updated_at: null },
       ],
     })
     renderWithApp(<ConversationPanel />, makeState({ selectedTicketId: "TCK-3", thread }))
     expect(screen.getByText("moved to Done")).toBeInTheDocument()
+  })
+})
+
+describe("ConversationPanel — comment editing", () => {
+  const planComment = {
+    id: 7,
+    ticket_id: "TCK-3",
+    author: "agent" as const,
+    kind: "plan" as const,
+    body: "# Plan",
+    created_at: 1,
+    updated_at: null as number | null,
+  }
+
+  test("editing reveals a textarea and saves via updateComment", async () => {
+    const updateComment = vi.fn()
+    const thread = makeThread({ comments: [planComment] })
+    renderWithApp(
+      <ConversationPanel />,
+      makeState({ selectedTicketId: "TCK-3", thread, updateComment }),
+    )
+    fireEvent.click(screen.getByRole("button", { name: /edit comment/i }))
+    fireEvent.change(screen.getByDisplayValue("# Plan"), { target: { value: "fixed plan" } })
+    fireEvent.click(screen.getByRole("button", { name: /save/i }))
+    await waitFor(() => expect(updateComment).toHaveBeenCalledWith("TCK-3", 7, "fixed plan"))
+  })
+
+  test("renders an edited marker when updated_at is set", () => {
+    const thread = makeThread({
+      comments: [{ ...planComment, updated_at: 2 }],
+    })
+    renderWithApp(<ConversationPanel />, makeState({ selectedTicketId: "TCK-3", thread }))
+    expect(screen.getByText(/edited/i)).toBeInTheDocument()
+  })
+
+  test("system comments have no edit affordance", () => {
+    const thread = makeThread({
+      comments: [
+        { id: 8, ticket_id: "TCK-3", author: "system", kind: "move", body: "moved", created_at: 1, updated_at: null },
+      ],
+    })
+    renderWithApp(<ConversationPanel />, makeState({ selectedTicketId: "TCK-3", thread }))
+    expect(screen.queryByRole("button", { name: /edit comment/i })).toBeNull()
   })
 })
