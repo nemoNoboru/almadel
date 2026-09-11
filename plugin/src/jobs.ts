@@ -2,7 +2,7 @@ import type { AlmadelClient } from "./http.ts";
 import type { AlmadelConfig } from "./config.ts";
 import type { AlmadelState } from "./state.ts";
 import type { Job } from "./types.ts";
-import { checkoutBranch, checkoutDefault, GitError } from "./git.ts";
+import { prepareTicketWorktree, returnToRepoRoot, GitError } from "./git.ts";
 import type { GitRunner } from "./git.ts";
 
 export interface JobContext {
@@ -104,15 +104,30 @@ async function handleTask(
 ): Promise<void> {
   ctx.state.currentTicket = job.ticket;
   ctx.state.status = "working";
+  let worktree: string;
   try {
-    await checkoutBranch(ctx.git, job.branch, ctx.config.repoRoot);
+    worktree = await prepareTicketWorktree(ctx.git, {
+      repoRoot: ctx.config.repoRoot,
+      branch: job.branch,
+      defaultBranch: ctx.config.defaultBranch,
+      ticket: job.ticket,
+    });
   } catch (err) {
     if (err instanceof GitError) {
-      ctx.log(`checkout failed: ${err.message}`);
+      ctx.log(`worktree setup failed: ${err.message}`);
       await failTicket(ctx, job.ticket, err.message);
       return;
     }
     throw err;
+  }
+
+  // Each ticket runs in its own worktree on its own branch. Re-anchor the
+  // process cwd so the agent's shell commands operate on the isolated checkout.
+  ctx.state.currentWorktree = worktree;
+  try {
+    process.chdir(worktree);
+  } catch (err) {
+    ctx.log(`chdir to worktree failed: ${String(err)}`);
   }
 
   // Server has already rendered the prompt (template vars substituted). Send it
@@ -145,12 +160,13 @@ async function failTicket(
   } catch (err) {
     ctx.log(`fail comment failed: ${String(err)}`);
   }
-  // Return the slot to the default branch so the next claim is clean.
+  // Return the process to the primary checkout and clear the worktree anchor.
   try {
-    await checkoutDefault(ctx.git, ctx.config.defaultBranch, ctx.config.repoRoot);
+    await returnToRepoRoot(ctx.git, ctx.config.repoRoot);
   } catch (err) {
-    ctx.log(`checkout default failed: ${String(err)}`);
+    ctx.log(`re-anchor to repo root failed: ${String(err)}`);
   }
+  ctx.state.currentWorktree = null;
   ctx.state.currentTicket = null;
   ctx.state.status = "idle";
 }
@@ -158,5 +174,3 @@ async function failTicket(
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
-
-export { checkoutDefault };

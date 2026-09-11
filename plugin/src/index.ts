@@ -4,7 +4,7 @@ import { AlmadelClient } from "./http.ts";
 import { createState } from "./state.ts";
 import { registerAgent } from "./register.ts";
 import { pollLoop } from "./jobs.ts";
-import { realGit } from "./git.ts";
+import { realGit, returnToRepoRoot } from "./git.ts";
 import { makeAlmadelTools, type JoinArgs } from "./tools.ts";
 import { decidePermission } from "./permission.ts";
 import { EventPipeline } from "./events.ts";
@@ -162,6 +162,13 @@ export const AlmadelPlugin: Plugin = async (input: PluginInput) => {
     if (state.currentSession) {
       await client.session.abort({ path: { id: state.currentSession } });
     }
+    // Re-anchor to the primary checkout; the ticket worktree is kept for review.
+    try {
+      await returnToRepoRoot(realGit, cfg.repoRoot);
+    } catch (err) {
+      log(`re-anchor on cancel failed: ${String(err)}`);
+    }
+    state.currentWorktree = null;
     state.currentSession = null;
     state.currentTicket = null;
     state.status = "idle";
@@ -196,6 +203,8 @@ export const AlmadelPlugin: Plugin = async (input: PluginInput) => {
   const tools = await makeAlmadelTools({
     client: http,
     state,
+    git: realGit,
+    repoRoot: cfg.repoRoot,
     enlist,
     leave,
     status,

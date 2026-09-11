@@ -3,7 +3,7 @@ import { now } from "../db"
 import type { DB } from "../db"
 import type { Job, PermissionDecision, PermissionScope, Ticket } from "../types"
 import { getAgent } from "./agents"
-import { getColumn, getTicket, listComments, mapTicket } from "./tickets"
+import { getColumn, getProject, getTicket, listComments, mapTicket } from "./tickets"
 import { buildThread, renderPrompt } from "../prompt"
 
 const CLAIM_SELECT = `
@@ -134,6 +134,7 @@ export function nextJob(db: DB, agentId: string): Job | null {
 export function makeTaskJob(db: DB, ticket: Ticket, agentId: string): Job {
   const column = getColumn(db, ticket.column_id)
   const agent = getAgent(db, agentId)
+  const project = getProject(db, ticket.project_id)
   const comments = listComments(db, ticket.id)
 
   const vars: Record<string, string> = {
@@ -143,6 +144,7 @@ export function makeTaskJob(db: DB, ticket: Ticket, agentId: string): Job {
     thread: buildThread(comments),
     branch: ticket.branch ?? `run/${ticket.id}`,
     project: ticket.project_id,
+    remote: project?.git_remote ?? "",
     port_base: String(agent?.port_base ?? ""),
   }
 

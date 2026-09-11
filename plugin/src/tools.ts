@@ -1,6 +1,8 @@
 import type { AlmadelClient } from "./http.ts";
 import type { AlmadelState } from "./state.ts";
 import { CommentKind } from "./types.ts";
+import { returnToRepoRoot } from "./git.ts";
+import type { GitRunner } from "./git.ts";
 import { askQuestion } from "./ask.ts";
 import { z } from "zod";
 
@@ -19,6 +21,8 @@ export interface JoinArgs {
 export interface ToolDeps {
   client: AlmadelClient;
   state: AlmadelState;
+  git: GitRunner;
+  repoRoot: string;
   getBoard: () => Promise<ColumnRef[]>;
   enlist: (args: JoinArgs) => Promise<string>;
   leave: () => Promise<string>;
@@ -120,6 +124,10 @@ export async function makeAlmadelTools(deps: ToolDeps) {
       async execute(args: { column: string; note?: string }): Promise<string> {
         const ticket = requireTicket(state);
         await client.move(ticket, { column: args.column, note: args.note });
+        // Stage complete: keep the worktree + branch for review, re-anchor cwd
+        // back to the primary checkout for the next session.
+        await returnToRepoRoot(deps.git, deps.repoRoot);
+        state.currentWorktree = null;
         state.currentTicket = null;
         state.status = "idle";
         return "ticket moved; stage complete";

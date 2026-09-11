@@ -257,8 +257,8 @@ export function seed(db: Database): void {
       ["col-spec", "Spec", 0, null, "Planning", null, null],
       ["col-planning", "Planning", 1, "Read ticket {{ticket.id}} and produce an implementation plan.\nDo not write code. Post the plan with kind=\"plan\", then move to Review.", "Review", "Failed", 2],
       ["col-review", "Review", 2, null, "Implement", null, null],
-      ["col-implement", "Implement", 3, "Ticket {{ticket.id}}. The approved plan is in the thread below.\nImplement it on branch {{branch}}. Run the test suite before finishing.\nDev servers must bind ports starting at {{port_base}}.", "Testing", "Failed", 2],
-      ["col-testing", "Testing", 4, "Ticket {{ticket.id}}. Verify the change on branch {{branch}}.\nRun the full test suite. Report results, then move to Done.", "Done", "Failed", 2],
+      ["col-implement", "Implement", 3, "Ticket {{ticket.id}}. The approved plan is in the thread below.\nImplement it on branch {{branch}}. Run the test suite before finishing.\nDev servers must bind ports starting at {{port_base}}.\nCommit your work on {{branch}}, push it, and open a pull request. Remote: {{remote}}.", "Testing", "Failed", 2],
+      ["col-testing", "Testing", 4, "Ticket {{ticket.id}}. Verify the change on branch {{branch}}.\nRun the full test suite. Report results, then move to Done.\nCommit any fixes on {{branch}} and push them.", "Done", "Failed", 2],
       ["col-done", "Done", 5, null, null, null, null],
       ["col-failed", "Failed", 6, null, null, null, null],
     ]

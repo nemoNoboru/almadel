@@ -13,6 +13,7 @@ export async function registerAgent(
   const result = await client.register({
     project: cfg.project,
     repo_root: cfg.repoRoot,
+    git_remote: cfg.gitRemote ?? undefined,
     default_branch: cfg.defaultBranch,
     label: cfg.label,
     opencode_version: cfg.opencodeVersion,
