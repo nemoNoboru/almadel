@@ -30,6 +30,8 @@ opencode serve
 
 `ALMADEL_JOIN` is the **project id or name** (resolved against `GET /api/projects`). `ALMADEL_TOKEN` is the registration token. The project is **never** inferred from the git remote.
 
+Set `ALMADEL_VERBOSE=1` (or `true`) to enable per-job dispatch logs (`job: ...`, `dispatched ...`); these are off by default to keep the TUI quiet. Errors and warnings are always logged.
+
 ### Interactive (`/almadel join`)
 
 opencode has no command-execution hook, so a slash command cannot run plugin code directly. Instead, the plugin registers three enlistment tools **unconditionally** and exposes `/almadel:join`, `/almadel:status`, `/almadel:leave` as static command templates that point the model at those tools:

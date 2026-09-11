@@ -51,6 +51,14 @@ describe("loadConfig", () => {
     const cfg = loadConfig("/some/dir", { ALMADEL_SERVER: "http://srv" });
     expect(cfg.gitRemote).toBeNull();
   });
+
+  test("verbose defaults to false and is enabled by ALMADEL_VERBOSE=1/true", () => {
+    expect(loadConfig("/d", {}).verbose).toBe(false);
+    expect(loadConfig("/d", { ALMADEL_VERBOSE: "1" }).verbose).toBe(true);
+    expect(loadConfig("/d", { ALMADEL_VERBOSE: "true" }).verbose).toBe(true);
+    expect(loadConfig("/d", { ALMADEL_VERBOSE: "0" }).verbose).toBe(false);
+    expect(loadConfig("/d", { ALMADEL_VERBOSE: "false" }).verbose).toBe(false);
+  });
 });
 
 describe("resolveProjectId", () => {
