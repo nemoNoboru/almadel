@@ -20,7 +20,7 @@ are the server's responsibilities.
 | Registration mismatch | `git_remote` differs | Refuse registration (`409`) |
 | opencode crashes | Poll stops | systemd restarts; lease expiry requeues |
 | Server restarts | Plugins reconnect on next poll | Nothing to do — poll is stateless |
-| Dirty slot directory | Checkout fails | Fail ticket with the git error |
+| Worktree setup fails | `git worktree add` errors | Fail ticket with the git error |
 
 ## The periodic sweep (one timer, three jobs)
 
@@ -42,9 +42,10 @@ next tick.
 ## Requeue, not lose
 
 Requeue always preserves the ticket thread (comments/events) and leaves the branch
-in place. A re-run after a crash starts from the same artifacts, checks out the
-existing `run/TCK-412` branch if present, else creates it. Nothing is lost; you
-just may have one fewer agent until you notice (§2.11).
+and its worktree in place. A re-run after a crash starts from the same artifacts:
+the plugin reclaims the existing worktree on the existing `run/TCK-412` branch if
+present, else creates it. Nothing is lost; you just may have one fewer agent until
+you notice (§2.11).
 
 ## "Forgets to move" — server moves by outcome
 
@@ -58,11 +59,13 @@ happen, so the server must be able to force it.
 
 ## Fail loudly, never force-recover
 
-The dirty-slot rule from §14: **never `git checkout -f` to recover.** A dirty slot
-means someone was working in it; force-discarding their changes to run a ticket
-ends adoption. The plugin fails the ticket with the git error; the server records
-`state='failed'` and the error comment. This is a terminal state, not a requeue
-candidate — a retry would hit the same dirty directory.
+The dirty-worktree rule from §14: **never `git checkout -f` to recover.** A dirty
+worktree means someone was working in it; force-discarding their changes to run a
+ticket ends adoption. With per-ticket worktrees, a dirty worktree is the *expected*
+uncommitted agent work and is preserved for review. The only remaining git failure
+mode is worktree setup (e.g. `git worktree add` fails); the plugin fails the ticket
+with the git error and the server records `state='failed'` and the error comment.
+This is a terminal state, not a requeue candidate.
 
 ## Server restart = nothing to do
 

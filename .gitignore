@@ -7,6 +7,9 @@ dist-ssr/
 web/dist/
 server/ui/
 
+# Almadel per-ticket worktrees (plugin-managed)
+.almadel/
+
 # Test output
 test-results/
 playwright-report/

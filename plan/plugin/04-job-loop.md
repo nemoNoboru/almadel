@@ -42,7 +42,8 @@ if (job.project !== config.project) {
 }
 ```
 
-2. **Checkout the branch** (`git checkout -b run/TCK-412`) in the slot directory.
+2. **Prepare the worktree** (`git worktree add .almadel/wt/<ticket> -b run/TCK-412 <default>`,
+   or reclaim the existing worktree on re-claim), then `process.chdir` into it.
    The branch name is in the job, not constructed from prompt text.
 3. **Create a session** and **send the rendered prompt** — the column template
    with title, body, and full thread inlined (`{{ticket.*}}`, `{{thread}}`,
@@ -62,19 +63,20 @@ and lives with the column config (§4.1).
 
 ## Git handling (git.ts)
 
-The hard rule (§14): **never `git checkout -f` to recover.** A dirty slot means
+The hard rule (§14): **never `git checkout -f` to recover.** A dirty worktree means
 someone was working in it; force-discarding their changes to run a ticket ends
-adoption. A checkout that fails on a dirty directory fails the ticket with the
-git error.
+adoption. Per-ticket worktrees make a dirty worktree the *expected* uncommitted
+agent work, preserved for review — tickets can no longer dirty-block one another.
 
-Lifecycle of a slot's branch:
+Lifecycle of a ticket's worktree:
 
-1. Before a ticket: ensure the slot is on the default branch (return to it after
-   the previous ticket).
-2. On task: `git checkout -b run/<ticket>`.
-3. After the stage (move/cancel/idle fallback): leave the ticket branch in place
-   for review, return the slot to the default branch. `node_modules` stays warm —
-   the main practical gain over worktree-per-ticket (§13).
+1. Before a ticket: the primary checkout stays on the default branch (it is never
+   switched per-ticket anymore).
+2. On task: `git worktree add .almadel/wt/<ticket> -b run/<ticket> <default>` (or
+   `git worktree add <path> run/<ticket>` if the branch already exists), then
+   `chdir` into it.
+3. After the stage (move/cancel/fail): `chdir` back to the primary checkout,
+   `git worktree prune`. The worktree and its branch stay on disk for review.
 4. Periodically prune merged `run/*` branches — branch hygiene, not directory
    hygiene (§13). This is likely a server/ops concern, but the plugin must not
    delete branches it created mid-run.

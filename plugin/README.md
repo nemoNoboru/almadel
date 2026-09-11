@@ -5,14 +5,14 @@ Turns an opencode instance into an [Almadel](https://github.com/your-org/almadel
 ## Non-negotiables
 
 - **In-process worker** — no outboard process.
-- **Fixed slot directories** + `git checkout -b run/TCK-N` (never git worktrees).
+- **Per-ticket git worktrees** — each ticket runs in its own `git worktree` on its own `run/TCK-N` branch under `.almadel/wt/<ticket>` (isolated, never `-f`).
 - **Agents dial out** — the server never connects to the agent.
 - **All state lives in the ticket** — nothing meaningful persisted locally.
 - **Projects are a namespace** — enforced by the claim query and re-verified by the plugin on every job.
 - **Plugin tools are the only path** — no curl fallback.
 - **TypeScript on Bun** everywhere.
 - **Enlistment is per-process, never persisted** — no `.almadel.json`; intent comes from `/almadel join` or the `ALMADEL_JOIN` + `ALMADEL_TOKEN` env pair.
-- **NEVER `git checkout -f`** — a dirty worktree is a hard error.
+- **NEVER `git checkout -f`** — a dirty worktree is EXPECTED uncommitted agent work; it is kept for review, never clobbered.
 
 ## Enlistment
 
@@ -54,9 +54,9 @@ opencode has no command-execution hook, so a slash command cannot run plugin cod
 
 ## How it works
 
-1. **Register** — `POST /api/agents` upserts the slot on `(project_id, repo_root, label)`.
+1. **Register** — `POST /api/agents` upserts the slot on `(project_id, repo_root, label)` and reports `git_remote` (read from `remote.origin.pushurl`/`remote.origin.url`) so the server can refuse a remote mismatch. The agent later uses this remote (via the prompt's `{{remote}}` var) to push its branch and open a PR.
 2. **Poll** — long-poll `POST /api/claim` (~35s) with telemetry.
-3. **Task** — verify project, `git checkout -b run/{id}`, create a session, send the server-rendered prompt verbatim.
+3. **Task** — verify project, prepare (or reclaim) the ticket's worktree on `run/{id}`, `chdir` into it, create a session, send the server-rendered prompt verbatim. On stage end (move/cancel/fail) re-anchor back to the repo root; the worktree + branch stay for review.
 4. **Ask** — `POST /api/tickets/{id}/ask` then long-poll `GET /api/questions/{qid}`. Fast path returns the answer; slow path returns "no answer yet" and the answer arrives as a new message.
 5. **Permission** — the `event` hook receives `permission.asked`, read-only checks auto-allow, the rest are forwarded to the server via `/permission-request` (which blocks until a human decides).
 

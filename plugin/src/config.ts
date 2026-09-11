@@ -6,6 +6,7 @@ export interface AlmadelConfig {
   project: string;
   repoRoot: string;
   defaultBranch: string;
+  gitRemote: string | null;
   label: string;
   opencodeVersion: string;
   token: string | null;
@@ -39,6 +40,13 @@ export function loadConfig(
   const defaultBranch =
     run("git", ["symbolic-ref", "--short", "HEAD"], directory) ?? "main";
 
+  // Push URL only: the remote is reported to the server for the mismatch check
+  // and surfaced to the agent so it can push its branch / open a PR. The project
+  // identity is NEVER inferred from it.
+  const gitRemote =
+    run("git", ["config", "--get", "remote.origin.pushurl"], directory) ??
+    run("git", ["config", "--get", "remote.origin.url"], directory);
+
   const label = env.ALMADEL_LABEL ?? env.HOSTNAME ?? "default";
   const opencodeVersion = env.OPENCODE_VERSION ?? "0.0.0";
 
@@ -47,6 +55,7 @@ export function loadConfig(
     project,
     repoRoot: directory,
     defaultBranch,
+    gitRemote,
     label,
     opencodeVersion,
     token,

@@ -1,17 +1,27 @@
 # 09 — Slots & Port Bands
 
-## A slot is a fixed checkout
+## A slot owns a primary checkout plus per-ticket worktrees
 
 ```
-slot  →  fixed directory (~/src/almadel-api)
+slot  →  fixed directory (~/src/almadel-api)          (the "primary" checkout)
       →  one opencode instance, one plugin
       →  PORT_BASE from the server at registration
+      →  per-ticket worktrees under .almadel/wt/<ticket>, each on run/<ticket>
 ```
 
-§2.2: the plugin can't create a worktree and re-anchor its own process, so a slot
-is a fixed checkout and per-ticket isolation is `git checkout -b run/TCK-412`
-inside it. Isolation still holds: two slots are two directories, two checkouts, two
-branches.
+§2.2 previously assumed the plugin couldn't create a worktree and re-anchor its own
+process, so a slot was a single fixed checkout and per-ticket isolation was
+`git checkout -b run/TCK-412` inside it. That turned out to be the root cause of
+the dirty-worktree failures: one dirty checkout blocks *every* ticket on the slot.
+
+The plugin now creates a **separate `git worktree` per ticket** and re-anchors the
+process via `process.chdir` before dispatch:
+
+- On task: `prepareTicketWorktree` — `git worktree add .almadel/wt/<ticket> -b run/<ticket> <default_branch>` (or reuse the existing worktree on re-claim), then `chdir` into it.
+- On stage end (move/cancel/fail): `chdir` back to the primary checkout, `git worktree prune`. The worktree and its branch stay on disk for review.
+
+Isolation still holds — and now it holds *between tickets on the same slot*, which a
+shared checkout could never guarantee.
 
 The server's involvement is narrow but real:
 
@@ -20,8 +30,7 @@ The server's involvement is narrow but real:
 - It stores `tickets.branch` and returns it in the `task` job so the plugin knows
   which branch to check out.
 
-Everything else (actual `git` operations, keeping `node_modules` warm, returning to
-the default branch between tickets) is plugin-side. The server is the source of
+Everything else (actual `git` operations) is plugin-side. The server is the source of
 truth for *which branch* a ticket ran on, because that's durable ticket state (§2.4).
 
 ## Port bands
@@ -43,19 +52,23 @@ starts with everything and needs no fetch to begin.
 
 ## Between tickets
 
-- Return to `default_branch`, leave the `run/TCK-412` branch in place for review.
-- `node_modules` stays warm — the main practical gain over worktree-per-ticket.
-- Periodically prune merged `run/*` branches (branch-hygiene, not directory-hygiene).
+- Re-anchor the process to the primary checkout; leave the `run/TCK-412` worktree
+  and branch in place for review.
+- `git worktree prune` cleans up metadata for worktrees whose directories are gone.
+- Each ticket gets a fresh worktree, so `node_modules` is cold per worktree — the
+  accepted cost of isolation (the old shared-checkout "warm node_modules" win is gone).
 
 These are plugin-side behaviours; the server just records the branch and the
 default. The `takeover` action (`POST /api/tickets/{id}/takeover`) marks the ticket
 human-owned and leaves the branch checked out so the human can open it themselves
 (§5.5).
 
-## Dirty-slot rule (server doesn't cause it, but must surface it)
+## Dirty-worktree rule (server doesn't cause it, but must surface it)
 
-Never `git checkout -f` to recover (§14). A dirty slot means someone was working in
-it. The plugin fails the ticket with the git error; the server records the failure
-state and the error comment. The rule lives in the plugin, but the server's failure
-handling (`10-failure-handling.md`) treats a checkout failure as a terminal
-`failed` ticket, not a silent requeue.
+Never `git checkout -f` to recover (§14). A dirty worktree means the agent's
+uncommitted work is in it — with per-ticket worktrees that is *expected* and is
+preserved for review. The only git failures that still fail a ticket are the ones
+the plugin can't recover from (e.g. `git worktree add` fails); the server records
+the failure state and the error comment. The rule lives in the plugin, but the
+server's failure handling (`10-failure-handling.md`) treats a worktree-setup
+failure as a terminal `failed` ticket, not a silent requeue.

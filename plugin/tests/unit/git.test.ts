@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { checkoutBranch, GitError } from "../../src/git.ts";
+import {
+  prepareTicketWorktree,
+  finishTicketWorktree,
+  worktreePathFor,
+  GitError,
+} from "../../src/git.ts";
 import type { GitRunner } from "../../src/git.ts";
 
 function gitFor(outputs: Record<string, { stdout?: string; stderr?: string; exitCode?: number }>) {
@@ -11,26 +16,22 @@ function gitFor(outputs: Record<string, { stdout?: string; stderr?: string; exit
   } as GitRunner;
 }
 
-describe("checkoutBranch", () => {
-  test("is a no-op when already on the target branch (dirty tree allowed)", async () => {
-    const calls: string[] = [];
-    const git = {
-      exec: async (args: string[]) => {
-        calls.push(args.join(" "));
-        if (args[0] === "rev-parse" && args[1] === "--git-dir") {
-          return { stdout: "/d/.git", stderr: "", exitCode: 0 };
-        }
-        if (args[0] === "rev-parse" && args[1] === "--abbrev-ref") {
-          return { stdout: "run/1", stderr: "", exitCode: 0 };
-        }
-        return { stdout: "", stderr: "", exitCode: 0 };
-      },
-    } as GitRunner;
-    await checkoutBranch(git, "run/1", "/d");
-    expect(calls).toEqual(["rev-parse --git-dir", "rev-parse --abbrev-ref HEAD"]);
-  });
+const opts = {
+  repoRoot: "/repo",
+  branch: "run/1",
+  defaultBranch: "main",
+  ticket: "TCK-1",
+};
+const target = worktreePathFor("/repo", "TCK-1");
 
-  test("is a no-op when the directory is not a git repository", async () => {
+describe("worktreePathFor", () => {
+  test("nests under .almadel/wt inside the repo root", () => {
+    expect(worktreePathFor("/repo", "TCK-418")).toBe("/repo/.almadel/wt/TCK-418");
+  });
+});
+
+describe("prepareTicketWorktree", () => {
+  test("works in place when the directory is not a git repository", async () => {
     const calls: string[] = [];
     const git = {
       exec: async (args: string[]) => {
@@ -38,19 +39,33 @@ describe("checkoutBranch", () => {
         return { stdout: "", stderr: "fatal: not a git repository", exitCode: 128 };
       },
     } as GitRunner;
-    await checkoutBranch(git, "run/1", "/d");
+    await expect(prepareTicketWorktree(git, opts)).resolves.toBe("/repo");
     expect(calls).toEqual(["rev-parse --git-dir"]);
   });
 
-  test("refuses on a dirty worktree when switching (never -f)", async () => {
-    const git = gitFor({
-      "rev-parse --abbrev-ref HEAD": { stdout: "main", exitCode: 0 },
-      "status --porcelain": { stdout: "M file.ts", exitCode: 0 },
-    });
-    await expect(checkoutBranch(git, "run/1", "/d")).rejects.toThrow(/dirty/);
+  test("reclaims an existing worktree (idempotent re-claim)", async () => {
+    const calls: string[] = [];
+    const git = {
+      exec: async (args: string[]) => {
+        calls.push(args.join(" "));
+        if (args[0] === "worktree" && args[1] === "list") {
+          return {
+            stdout: `worktree /repo\nHEAD abc\n\nworktree ${target}\nbranch refs/heads/run/1\n`,
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        return { stdout: "", stderr: "", exitCode: 0 };
+      },
+    } as GitRunner;
+    await expect(prepareTicketWorktree(git, opts)).resolves.toBe(target);
+    expect(calls).toEqual([
+      "rev-parse --git-dir",
+      "worktree list --porcelain",
+    ]);
   });
 
-  test("creates the branch on a clean tree when it does not exist", async () => {
+  test("creates a new branch from the default branch (never -f)", async () => {
     const calls: string[] = [];
     const git = {
       exec: async (args: string[]) => {
@@ -61,12 +76,12 @@ describe("checkoutBranch", () => {
         return { stdout: "", stderr: "", exitCode: 0 };
       },
     } as GitRunner;
-    await checkoutBranch(git, "run/1", "/d");
-    expect(calls).toContain("checkout -b run/1");
+    await expect(prepareTicketWorktree(git, opts)).resolves.toBe(target);
+    expect(calls).toContain(`worktree add ${target} -b run/1 main`);
     expect(calls.some((c) => c.includes("-f"))).toBe(false);
   });
 
-  test("checks out an existing branch on a clean tree", async () => {
+  test("checks out an existing branch in a fresh worktree", async () => {
     const calls: string[] = [];
     const git = {
       exec: async (args: string[]) => {
@@ -77,18 +92,42 @@ describe("checkoutBranch", () => {
         return { stdout: "", stderr: "", exitCode: 0 };
       },
     } as GitRunner;
-    await checkoutBranch(git, "run/1", "/d");
-    expect(calls).toContain("checkout run/1");
-    expect(calls).not.toContain("checkout -b run/1");
+    await expect(prepareTicketWorktree(git, opts)).resolves.toBe(target);
+    expect(calls).toContain(`worktree add ${target} run/1`);
+    expect(calls).not.toContain(`worktree add ${target} -b run/1 main`);
   });
 
-  test("surfaces git failure", async () => {
+  test("surfaces git failure as a GitError", async () => {
     const git = gitFor({
-      "rev-parse --abbrev-ref HEAD": { stdout: "main", exitCode: 0 },
-      "status --porcelain": { stdout: "", exitCode: 0 },
       "rev-parse --verify --quiet refs/heads/run/1": { stdout: "", stderr: "", exitCode: 1 },
-      "checkout -b run/1": { stdout: "", stderr: "boom", exitCode: 128 },
+      [`worktree add ${target} -b run/1 main`]: { stdout: "", stderr: "boom", exitCode: 128 },
     });
-    await expect(checkoutBranch(git, "run/1", "/d")).rejects.toThrow(GitError);
+    await expect(prepareTicketWorktree(git, opts)).rejects.toThrow(GitError);
+  });
+});
+
+describe("finishTicketWorktree", () => {
+  test("is a no-op when not a git repository", async () => {
+    const calls: string[] = [];
+    const git = {
+      exec: async (args: string[]) => {
+        calls.push(args.join(" "));
+        return { stdout: "", stderr: "fatal", exitCode: 128 };
+      },
+    } as GitRunner;
+    await finishTicketWorktree(git, "/repo");
+    expect(calls).toEqual(["rev-parse --git-dir"]);
+  });
+
+  test("prunes stale worktree metadata but keeps the worktree", async () => {
+    const calls: string[] = [];
+    const git = {
+      exec: async (args: string[]) => {
+        calls.push(args.join(" "));
+        return { stdout: "", stderr: "", exitCode: 0 };
+      },
+    } as GitRunner;
+    await finishTicketWorktree(git, "/repo");
+    expect(calls).toEqual(["rev-parse --git-dir", "worktree prune"]);
   });
 });

@@ -39,6 +39,7 @@ OPENCODE_BIN="${OPENCODE_BIN:-$(command -v opencode 2>/dev/null || echo "$HOME/.
 
 WORK_DIR="${ALMADEL_E2E_DIR:-$(mktemp -d /tmp/almadel-e2e.XXXXXX)}"
 FEATURE_REPO="$WORK_DIR/feature-repo"
+BARE_REMOTE="$WORK_DIR/remote.git"
 BUNDLE_DIR="$WORK_DIR/plugin-bundle"
 DB_PATH="$WORK_DIR/almadel.db"
 SERVER_LOG="$WORK_DIR/server.log"
@@ -129,6 +130,10 @@ EOF
   && git add -A \
   && git -c user.email=e2e@example.com -c user.name=e2e commit -q -m "initial" )
 
+echo "==> creating a bare remote so the agent can push its branch / open a PR"
+git init -q --bare "$BARE_REMOTE"
+( cd "$FEATURE_REPO" && git remote add origin "$BARE_REMOTE" && git push -q -u origin main )
+
 echo "==> starting almadel server on :$SERVER_PORT"
 (
   cd "$SERVER_DIR"
@@ -143,6 +148,10 @@ if ! wait_http "$SERVER_URL/api/roster" 50 0.2; then
   echo "server failed to start" >&2; log_failure; exit 1
 fi
 echo "==> server is up"
+
+# Record the bare remote on the project so the {{remote}} template var resolves and
+# the agent's push/PR instructions point at a real, pushable remote.
+bun -e 'import { Database } from "bun:sqlite"; const db = new Database(process.argv[1]); db.run("UPDATE projects SET git_remote = ? WHERE id = ?", [process.argv[2], "almadel-api"]); db.close();' "$DB_PATH" "$BARE_REMOTE" >/dev/null 2>&1 || true
 
 echo "==> starting opencode (model=$MODEL) on :$OPENCODE_PORT"
 (

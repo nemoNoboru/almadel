@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { join } from "node:path";
 
 export interface GitRunner {
   exec(args: string[], cwd?: string): Promise<{ stdout: string; stderr: string; exitCode: number }>;
@@ -25,65 +26,98 @@ export class GitError extends Error {
   }
 }
 
+/** Absolute path for a ticket's isolated worktree under `<repoRoot>/.almadel/wt/`. */
+export function worktreePathFor(repoRoot: string, ticket: string): string {
+  return join(repoRoot, ".almadel", "wt", ticket);
+}
+
+interface PrepareOpts {
+  repoRoot: string;
+  branch: string;
+  defaultBranch: string;
+  ticket: string;
+}
+
+function listHasPath(stdout: string, targetPath: string): boolean {
+  return stdout.split("\n").some((line) => line === `worktree ${targetPath}`);
+}
+
 /**
- * Ensures the agent is on `branch`, creating it if needed. NEVER uses `-f`:
- * switching away from a dirty worktree is a hard error — we fail the ticket
- * rather than clobber user/agent work.
+ * Prepares (or reclaims) an isolated git worktree for a ticket on `branch`, and
+ * returns the path the agent should work in.
  *
- * A ticket may be claimed across multiple stages (planning -> implement ->
- * testing), all on the same branch. Re-claiming must be idempotent:
- *  - already on the branch -> no-op (continues work, dirty tree allowed),
- *  - branch exists on a clean tree -> `git checkout <branch>`,
- *  - branch is new on a clean tree -> `git checkout -b <branch>`.
+ * - Not a git repo -> returns `repoRoot` (work in place; isolation unavailable).
+ * - Worktree already registered -> reuse it (idempotent re-claim after a crash
+ *   or requeue; the change is preserved, never clobbered).
+ * - Branch already exists -> `git worktree add <path> <branch>`.
+ * - Branch is new -> `git worktree add <path> -b <branch> <defaultBranch>` (branches
+ *   from the default, never from the primary checkout's possibly-dirty HEAD).
+ *
+ * NEVER uses `-f`: a dirty worktree is EXPECTED uncommitted agent work, kept for
+ * review. Each ticket gets its own worktree so tickets can never dirty-block one
+ * another.
  */
-export async function checkoutBranch(
+export async function prepareTicketWorktree(
   git: GitRunner,
-  branch: string,
-  cwd: string,
-): Promise<void> {
-  // Git is an optional convenience, never a requirement. If the directory isn't
-  // a git repository there is nothing to check out — the agent works in the
-  // directory as-is and the prompt already names the branch.
-  const inRepo = await git.exec(["rev-parse", "--git-dir"], cwd);
-  if (inRepo.exitCode !== 0) return;
+  opts: PrepareOpts,
+): Promise<string> {
+  const { repoRoot, branch, defaultBranch, ticket } = opts;
 
-  const current = await git.exec(["rev-parse", "--abbrev-ref", "HEAD"], cwd);
-  if (current.stdout.trim() === branch) return;
+  const inRepo = await git.exec(["rev-parse", "--git-dir"], repoRoot);
+  if (inRepo.exitCode !== 0) return repoRoot;
 
-  const dirty = await git.exec(["status", "--porcelain"], cwd);
-  if (dirty.stdout.trim() !== "") {
-    throw new GitError(
-      "worktree is dirty — refusing to switch branches (never force)",
-    );
+  const targetPath = worktreePathFor(repoRoot, ticket);
+
+  const list = await git.exec(["worktree", "list", "--porcelain"], repoRoot);
+  if (list.exitCode === 0 && listHasPath(list.stdout, targetPath)) {
+    return targetPath;
   }
 
   const exists = await git.exec(
     ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`],
-    cwd,
+    repoRoot,
   );
-  const args = exists.exitCode === 0 ? ["checkout", branch] : ["checkout", "-b", branch];
+  const args =
+    exists.exitCode === 0
+      ? ["worktree", "add", targetPath, branch]
+      : ["worktree", "add", targetPath, "-b", branch, defaultBranch];
 
-  const res = await git.exec(args, cwd);
+  const res = await git.exec(args, repoRoot);
   if (res.exitCode !== 0) {
     throw new GitError(
-      `git checkout ${branch} failed: ${res.stderr.trim() || "unknown"}`,
+      `git worktree add ${targetPath} failed: ${res.stderr.trim() || "unknown"}`,
     );
   }
+  return targetPath;
 }
 
-/** Returns the slot to the default branch between tickets (no forced reset). */
-export async function checkoutDefault(
+/**
+ * Ends a ticket stage. Prunes stale worktree metadata but KEEPS the worktree and
+ * its branch on disk so the change remains available for review. The primary
+ * checkout is left untouched.
+ */
+export async function finishTicketWorktree(
   git: GitRunner,
-  defaultBranch: string,
-  cwd: string,
+  repoRoot: string,
 ): Promise<void> {
-  const inRepo = await git.exec(["rev-parse", "--git-dir"], cwd);
+  const inRepo = await git.exec(["rev-parse", "--git-dir"], repoRoot);
   if (inRepo.exitCode !== 0) return;
+  await git.exec(["worktree", "prune"], repoRoot);
+}
 
-  const res = await git.exec(["checkout", defaultBranch], cwd);
-  if (res.exitCode !== 0) {
-    throw new GitError(
-      `git checkout ${defaultBranch} failed: ${res.stderr.trim() || "unknown"}`,
-    );
+/**
+ * Re-anchors the process back to the primary checkout after a stage ends
+ * (move / cancel / fail). Prunes stale worktree metadata and chdirs out of the
+ * ticket worktree so the next session starts from the repo root.
+ */
+export async function returnToRepoRoot(
+  git: GitRunner,
+  repoRoot: string,
+): Promise<void> {
+  await finishTicketWorktree(git, repoRoot);
+  try {
+    process.chdir(repoRoot);
+  } catch {
+    // Directory vanished (repo deleted mid-run) — nothing to re-anchor to.
   }
 }
