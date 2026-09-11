@@ -98,6 +98,13 @@ export class HttpClient implements AlmadelClient {
     })
   }
 
+  async updateComment(ticketId: string, commentId: number, body: string) {
+    await request(`/api/tickets/${ticketId}/comments/${commentId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ body }),
+    })
+  }
+
   async decidePermission(
     ticketId: string,
     decision: "allow" | "deny",

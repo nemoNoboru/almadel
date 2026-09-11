@@ -5,7 +5,7 @@ import { migrate, seed } from "../src/db"
 import { registerAgent } from "../src/domain/agents"
 import { requestPermission } from "../src/domain/blocking"
 import { claimNow } from "../src/domain/claim"
-import { createTicket, getTicket } from "../src/domain/tickets"
+import { addComment, createTicket, getTicket } from "../src/domain/tickets"
 import { handleApi } from "../src/server/router"
 
 function testDb(): Database {
@@ -278,6 +278,67 @@ describe("tickets", () => {
       body: { project_id: "nope", agent_id: "nope", instruction: "x" },
     })
     expect(res!.status).toBe(404)
+  })
+})
+
+describe("comment editing", () => {
+  test("PATCH updates a non-system comment and sets updated_at", async () => {
+    const db = testDb()
+    const t = createTicket(db, { project_id: "almadel-api", title: "x", column_id: "col-implement" })
+    const commentId = addComment(db, t.id, "agent", "plan", "original")
+
+    const res = await api(db, config, "PATCH", `/api/tickets/${t.id}/comments/${commentId}`, {
+      body: { body: "fixed" },
+    })
+    expect(res!.status).toBe(204)
+
+    const got = await api(db, config, "GET", `/api/tickets/${t.id}`)
+    const body = await got!.json()
+    const comment = body.comments.find((c: { id: number }) => c.id === commentId)
+    expect(comment.body).toBe("fixed")
+    expect(comment.updated_at).toBeGreaterThan(0)
+  })
+
+  test("PATCH 400s on empty or missing body", async () => {
+    const db = testDb()
+    const t = createTicket(db, { project_id: "almadel-api", title: "x", column_id: "col-implement" })
+    const commentId = addComment(db, t.id, "agent", "comment", "hi")
+
+    const empty = await api(db, config, "PATCH", `/api/tickets/${t.id}/comments/${commentId}`, {
+      body: { body: "" },
+    })
+    expect(empty!.status).toBe(400)
+
+    const missing = await api(db, config, "PATCH", `/api/tickets/${t.id}/comments/${commentId}`, { body: {} })
+    expect(missing!.status).toBe(400)
+  })
+
+  test("PATCH 404s for unknown ticket or mismatched/unknown comment", async () => {
+    const db = testDb()
+    const t = createTicket(db, { project_id: "almadel-api", title: "x", column_id: "col-implement" })
+    const other = createTicket(db, { project_id: "almadel-api", title: "y", column_id: "col-implement" })
+    const commentId = addComment(db, t.id, "agent", "comment", "hi")
+
+    const wrongTicket = await api(db, config, "PATCH", `/api/tickets/${other.id}/comments/${commentId}`, {
+      body: { body: "no" },
+    })
+    expect(wrongTicket!.status).toBe(404)
+
+    const unknownComment = await api(db, config, "PATCH", `/api/tickets/${t.id}/comments/99999`, {
+      body: { body: "no" },
+    })
+    expect(unknownComment!.status).toBe(404)
+  })
+
+  test("PATCH 403s when editing a system comment", async () => {
+    const db = testDb()
+    const t = createTicket(db, { project_id: "almadel-api", title: "x", column_id: "col-implement" })
+    const commentId = addComment(db, t.id, "system", "move", "moved to Implement")
+
+    const res = await api(db, config, "PATCH", `/api/tickets/${t.id}/comments/${commentId}`, {
+      body: { body: "tampered" },
+    })
+    expect(res!.status).toBe(403)
   })
 })
 

@@ -7,6 +7,7 @@ import {
   CheckIcon,
   CornerDownLeftIcon,
   GitBranchIcon,
+  PencilIcon,
   SendIcon,
   UserIcon,
   XIcon,
@@ -139,7 +140,7 @@ export function ConversationPanel() {
             </Alert>
           )}
 
-          <Thread comments={thread.comments} />
+          <Thread ticketId={ticket.id} comments={thread.comments} />
 
           {thread.pending
             .filter((p) => p.sent_at == null)
@@ -164,7 +165,7 @@ export function ConversationPanel() {
   )
 }
 
-function Thread({ comments }: { comments: Comment[] }) {
+function Thread({ ticketId, comments }: { ticketId: string; comments: Comment[] }) {
   if (comments.length === 0) {
     return (
       <p className="py-6 text-center text-sm text-muted-foreground">
@@ -176,20 +177,38 @@ function Thread({ comments }: { comments: Comment[] }) {
   return (
     <>
       {comments.map((c) => (
-        <CommentRow key={c.id} comment={c} />
+        <CommentRow key={c.id} ticketId={ticketId} comment={c} />
       ))}
     </>
   )
 }
 
-function CommentRow({ comment }: { comment: Comment }) {
+function CommentRow({ ticketId, comment }: { ticketId: string; comment: Comment }) {
+  const { updateComment } = useApp()
   const mine = comment.author === "human"
   const system = comment.author === "system"
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(comment.body ?? "")
 
   if (system) {
     return (
       <p className="text-center text-xs text-muted-foreground">{comment.body}</p>
     )
+  }
+
+  const save = async () => {
+    if (!draft.trim()) return
+    try {
+      await updateComment(ticketId, comment.id, draft.trim())
+      setEditing(false)
+    } catch {
+      toast.error("Couldn't save edit")
+    }
+  }
+
+  const cancel = () => {
+    setDraft(comment.body ?? "")
+    setEditing(false)
   }
 
   return (
@@ -225,11 +244,49 @@ function CommentRow({ comment }: { comment: Comment }) {
             permission
           </div>
         )}
-        <p className="whitespace-pre-wrap">{comment.body}</p>
+        {editing ? (
+          <div className="flex flex-col gap-2">
+            <Textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              rows={4}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Escape") cancel()
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) save()
+              }}
+            />
+            <div className="flex items-center justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={cancel}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={save} disabled={!draft.trim()}>
+                Save
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <p className="whitespace-pre-wrap">{comment.body}</p>
+        )}
       </div>
       <span className="flex items-center gap-1 text-xs text-muted-foreground">
         {mine ? <UserIcon className="size-3" /> : <BotIcon className="size-3" />}
         {relativeTime(comment.created_at)}
+        {comment.updated_at != null && <span>· edited</span>}
+        {!editing && (
+          <button
+            type="button"
+            aria-label="Edit comment"
+            className="ml-1 inline-flex items-center gap-0.5 hover:text-foreground"
+            onClick={() => {
+              setDraft(comment.body ?? "")
+              setEditing(true)
+            }}
+          >
+            <PencilIcon className="size-3" />
+            Edit
+          </button>
+        )}
       </span>
     </div>
   )

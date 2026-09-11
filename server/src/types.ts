@@ -71,6 +71,7 @@ export interface Comment {
   kind: CommentKind
   body: string | null
   created_at: number
+  updated_at: number | null
 }
 
 export interface Agent {
@@ -219,6 +220,8 @@ export const commentSchema = z.object({
 export const askSchema = z.object({ question: z.string().min(1).max(4000) })
 
 export const replySchema = z.object({ body: z.string().min(1) })
+
+export const commentUpdateSchema = z.object({ body: z.string().min(1).max(20000) })
 
 export const messageSchema = z.object({ body: z.string().min(1) })
 

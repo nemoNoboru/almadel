@@ -151,6 +151,7 @@ class Store {
       kind: "move",
       body: note ? `moved to ${column.name}: ${note}` : `moved to ${column.name}`,
       created_at: Date.now(),
+      updated_at: null,
     })
   }
 
@@ -165,6 +166,7 @@ class Store {
       kind: "answer",
       body,
       created_at: Date.now(),
+      updated_at: null,
     })
 
     const question = this.questions.find((q) => q.ticket_id === ticketId)
@@ -190,6 +192,14 @@ class Store {
     }
   }
 
+  updateComment(ticketId: string, commentId: number, body: string): void {
+    const comment = this.comments.find((c) => c.id === commentId && c.ticket_id === ticketId)
+    if (!comment) throw new Error(`comment not found: ${commentId}`)
+    if (comment.author === "system") throw new Error("system comments are not editable")
+    comment.body = body
+    comment.updated_at = Date.now()
+  }
+
   decidePermission(
     ticketId: string,
     decision: "allow" | "deny",
@@ -212,6 +222,7 @@ class Store {
       kind: "permission",
       body: `${decision === "allow" ? "Allowed" : "Denied"} ${permission?.command ?? ""} (${scope})`,
       created_at: Date.now(),
+      updated_at: null,
     })
 
     if (ticket.state === "blocked_permission") {
@@ -235,6 +246,7 @@ class Store {
       kind: "move",
       body: "cancelled by human",
       created_at: Date.now(),
+      updated_at: null,
     })
   }
 
@@ -252,6 +264,7 @@ class Store {
       kind: "move",
       body: "taken over by human (branch left in place)",
       created_at: Date.now(),
+      updated_at: null,
     })
   }
 
@@ -299,6 +312,7 @@ class Store {
       kind: "question",
       body,
       created_at: Date.now(),
+      updated_at: null,
     })
   }
 

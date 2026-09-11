@@ -59,6 +59,7 @@ export interface Comment {
   kind: CommentKind
   body: string | null
   created_at: number
+  updated_at: number | null
 }
 
 export type AgentStatus =

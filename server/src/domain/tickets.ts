@@ -1,4 +1,4 @@
-import { agentJobs, broadcastRoster, projectClaim } from "../notify"
+import { agentJobs, broadcastRoster, broadcastTicket, projectClaim } from "../notify"
 import { mapColumn, mapComment, mapProject, nextTicketId, now } from "../db"
 import type { DB } from "../db"
 import { HttpError } from "../http-error"
@@ -110,6 +110,16 @@ export function addComment(
     .query("INSERT INTO comments (ticket_id, author, kind, body, created_at) VALUES (?, ?, ?, ?, ?)")
     .run(ticketId, author, kind, body, now())
   return Number(res.lastInsertRowid)
+}
+
+export function updateComment(db: DB, ticketId: string, commentId: number, body: string): Comment {
+  const row = db.query("SELECT * FROM comments WHERE id = ?").get(commentId) as Record<string, unknown> | undefined
+  if (!row || row.ticket_id !== ticketId) throw new HttpError(404, "comment not found")
+  if (row.author === "system") throw new HttpError(403, "system comments are not editable")
+
+  db.query("UPDATE comments SET body = ?, updated_at = ? WHERE id = ?").run(body, now(), commentId)
+  broadcastTicket(ticketId, "{}")
+  return mapComment(db.query("SELECT * FROM comments WHERE id = ?").get(commentId) as Record<string, unknown> | undefined)!
 }
 
 // ---------------------------------------------------------------------------

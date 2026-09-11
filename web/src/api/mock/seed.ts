@@ -355,6 +355,7 @@ export const comments: Comment[] = [
     kind: "move",
     body: "moved to Implement by Alimiel",
     created_at: ago(8 * min),
+    updated_at: null,
   },
   {
     id: 2,
@@ -363,6 +364,7 @@ export const comments: Comment[] = [
     kind: "plan",
     body: "## Plan\n\n1. Add a token-bucket rate limiter.\n2. Wire it into the /auth handler.\n3. Add tests.",
     created_at: ago(7 * min),
+    updated_at: null,
   },
   {
     id: 3,
@@ -371,6 +373,7 @@ export const comments: Comment[] = [
     kind: "question",
     body: "Which auth backend do we use — OAuth2, JWT, or sessions?",
     created_at: ago(12 * min),
+    updated_at: null,
   },
   {
     id: 4,
@@ -379,6 +382,7 @@ export const comments: Comment[] = [
     kind: "move",
     body: "moved to Done by Barachiel",
     created_at: ago(2 * 24 * hr),
+    updated_at: null,
   },
   {
     id: 5,
@@ -387,6 +391,7 @@ export const comments: Comment[] = [
     kind: "comment",
     body: "Tests pass, branch run/TCK-380 left for review.",
     created_at: ago(2 * 24 * hr + min),
+    updated_at: null,
   },
 ]
 
