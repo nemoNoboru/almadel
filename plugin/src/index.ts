@@ -211,6 +211,23 @@ export const AlmadelPlugin: Plugin = async (input: PluginInput) => {
     state.currentModel = null;
     state.currentTicket = null;
     state.status = "idle";
+    state.pendingRecycle = false;
+  }
+
+  // Recycle the slot once the current session has actually ended (idle/error).
+  // Called from the event hook; keeps the claim loop from grabbing the next task
+  // while this session is still committing.
+  async function recycleSlot() {
+    try {
+      await returnToRepoRoot(realGit, cfg.repoRoot);
+    } catch (err) {
+      log(`re-anchor on recycle failed: ${String(err)}`);
+    }
+    state.currentSession = null;
+    state.currentTicket = null;
+    state.currentWorktree = null;
+    state.status = "idle";
+    state.pendingRecycle = false;
   }
 
   function startPolling() {
@@ -284,22 +301,29 @@ export const AlmadelPlugin: Plugin = async (input: PluginInput) => {
         return;
       }
       if (e.type === "session.idle") {
+        if (state.pendingRecycle) {
+          await recycleSlot();
+        } else {
+          // An agent can end a stage by going quiet without ever calling
+          // almadel_move. Checkpoint a dirty worktree so work is never stranded.
+          await checkpointStage({
+            git: realGit,
+            worktree: state.currentWorktree,
+            ticket: state.currentTicket,
+            branch: state.currentBranch,
+            column: "idle",
+            label: cfg.label,
+            gitRemote: cfg.gitRemote,
+            log,
+          });
+        }
         pipeline?.enqueue(e.type, e.properties);
-        // An agent can end a stage by going quiet without ever calling
-        // almadel_move. Checkpoint a dirty worktree so work is never stranded.
-        await checkpointStage({
-          git: realGit,
-          worktree: state.currentWorktree,
-          ticket: state.currentTicket,
-          branch: state.currentBranch,
-          column: "idle",
-          label: cfg.label,
-          gitRemote: cfg.gitRemote,
-          log,
-        });
         return;
       }
       if (e.type === "session.error") {
+        if (state.pendingRecycle) {
+          await recycleSlot();
+        }
         pipeline?.enqueue(e.type, e.properties);
         return;
       }

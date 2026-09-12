@@ -33,6 +33,7 @@ export interface AlmadelState {
   pendingPermissions: Map<string, PendingPermission>;
   pendingQuestions: Map<string, PendingQuestion>;
   running: boolean;
+  pendingRecycle: boolean;
 }
 
 export function createState(): AlmadelState {
@@ -51,5 +52,6 @@ export function createState(): AlmadelState {
     pendingPermissions: new Map(),
     pendingQuestions: new Map(),
     running: false,
+    pendingRecycle: false,
   };
 }
