@@ -47,7 +47,7 @@ describe("MockClient mutations", () => {
       name: "acme",
       git_remote: "git@github.com:acme/acme.git",
     })
-    expect(project.id).toMatch(/^prj_/)
+    expect(project.id).toBe("acme")
     expect(project.default_branch).toBe("main")
 
     const board = await client.getBoard(project.id)

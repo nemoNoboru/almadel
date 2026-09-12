@@ -45,7 +45,7 @@ describe("createProject", () => {
   test("inserts a project with the default 7-column board", () => {
     const db = testDb()
     const p = createProject(db, { name: "acme", git_remote: "git@github.com:acme/acme.git" })
-    expect(p.id).toMatch(/^prj_/)
+    expect(p.id).toBe("acme")
     expect(p.name).toBe("acme")
     expect(p.git_remote).toBe("git@github.com:acme/acme.git")
     expect(p.default_branch).toBe("main")

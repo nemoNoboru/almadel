@@ -203,7 +203,10 @@ export const claimBodySchema = z.object({
 })
 
 export const createProjectSchema = z.object({
-  name: z.string().min(1),
+  name: z
+    .string()
+    .min(1)
+    .regex(/^[a-z0-9][a-z0-9_-]*$/, "name must be a lowercase slug (a-z, 0-9, -, _)"),
   git_remote: z.string().nullable().optional(),
   default_branch: z.string().optional(),
 })

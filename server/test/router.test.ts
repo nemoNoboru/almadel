@@ -115,7 +115,7 @@ describe("roster + projects", () => {
     })
     expect(res!.status).toBe(201)
     const project = await res!.json()
-    expect(project.id).toMatch(/^prj_/)
+    expect(project.id).toBe("acme")
     expect(project.name).toBe("acme")
     expect(project.git_remote).toBe("git@github.com:acme/acme.git")
     expect(project.default_branch).toBe("main")
@@ -133,6 +133,10 @@ describe("roster + projects", () => {
     const bad = await api(db, config, "POST", "/api/projects", { body: {} })
     expect(bad!.status).toBe(400)
     expect((await bad!.json()).error).toBe("invalid project")
+
+    const badSlug = await api(db, config, "POST", "/api/projects", { body: { name: "Bad Name" } })
+    expect(badSlug!.status).toBe(400)
+    expect((await badSlug!.json()).error).toBe("invalid project")
 
     const dup = await api(db, config, "POST", "/api/projects", { body: { name: "almadel-api" } })
     expect(dup!.status).toBe(409)

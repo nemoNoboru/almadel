@@ -59,7 +59,6 @@ class Store {
   private nextCommentId = 100
   private nextTicketNum = 430
   private nextQuestionId = 100
-  private nextProjectId = 1
 
   // ---- derived reads -------------------------------------------------------
 
@@ -126,7 +125,7 @@ class Store {
     if (this.projects.some((p) => p.name === input.name)) {
       throw new Error("project name already exists")
     }
-    const id = `prj_${this.nextProjectId++}`
+    const id = input.name
     const project: Project = {
       id,
       name: input.name,

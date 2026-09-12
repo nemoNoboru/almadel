@@ -1,5 +1,5 @@
 import { agentJobs, broadcastRoster, broadcastTicket, projectClaim } from "../notify"
-import { insertDefaultBoard, mapColumn, mapComment, mapProject, newId, nextTicketId, now } from "../db"
+import { insertDefaultBoard, mapColumn, mapComment, mapProject, nextTicketId, now } from "../db"
 import type { DB } from "../db"
 import { HttpError } from "../http-error"
 import type { Board, Column, Comment, CommentAuthor, CommentKind, CreateProjectInput, Project, Ticket, TicketState } from "../types"
@@ -44,7 +44,7 @@ export function createProject(db: DB, input: CreateProjectInput): Project {
     | undefined
   if (existing) throw new HttpError(409, "project name already exists")
 
-  const id = newId("prj")
+  const id = input.name
   const gitRemote = input.git_remote ?? null
   const defaultBranch = input.default_branch ?? "main"
   const ts = now()

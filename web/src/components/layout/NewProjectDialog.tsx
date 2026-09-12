@@ -82,6 +82,9 @@ export function NewProjectDialog({
                 placeholder="my-project"
                 autoFocus
               />
+              <FieldDescription>
+                Lowercase slug. Agents join with ALMADEL_JOIN=this name.
+              </FieldDescription>
             </Field>
             <Field>
               <FieldLabel htmlFor="project-remote">Origin URL</FieldLabel>
