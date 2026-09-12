@@ -25,7 +25,9 @@ export interface AlmadelState {
   token: string | null;
   currentTicket: string | null;
   currentSession: string | null;
+  currentModel: string | null;
   currentWorktree: string | null;
+  currentBranch: string | null;
   status: AgentStatus;
   board: Board | null;
   pendingPermissions: Map<string, PendingPermission>;
@@ -42,7 +44,9 @@ export function createState(): AlmadelState {
     token: null,
     currentTicket: null,
     currentSession: null,
+    currentModel: null,
     currentWorktree: null,
+    currentBranch: null,
     status: "idle",
     board: null,
     pendingPermissions: new Map(),

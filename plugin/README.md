@@ -12,7 +12,8 @@ Turns an opencode instance into an [Almadel](https://github.com/your-org/almadel
 - **Plugin tools are the only path** — no curl fallback.
 - **TypeScript on Bun** everywhere.
 - **Enlistment is per-process, never persisted** — no `.almadel.json`; intent comes from `/almadel join` or the `ALMADEL_JOIN` + `ALMADEL_TOKEN` env pair.
-- **NEVER `git checkout -f`** — a dirty worktree is EXPECTED uncommitted agent work; it is kept for review, never clobbered.
+- **NEVER `git checkout -f`** — worktrees are never clobbered.
+- **Stage boundaries commit** — a dirty worktree at stage end is a bug, not a feature. Uncommitted work is unreachable from any other machine.
 
 ## Enlistment
 
@@ -58,7 +59,7 @@ opencode has no command-execution hook, so a slash command cannot run plugin cod
 
 1. **Register** — `POST /api/agents` upserts the slot on `(project_id, repo_root, label)` and reports `git_remote` (read from `remote.origin.pushurl`/`remote.origin.url`) so the server can refuse a remote mismatch. The agent later uses this remote (via the prompt's `{{remote}}` var) to push its branch and open a PR.
 2. **Poll** — long-poll `POST /api/claim` (~35s) with telemetry.
-3. **Task** — verify project, prepare (or reclaim) the ticket's worktree on `run/{id}`, `chdir` into it, create a session, send the server-rendered prompt verbatim. On stage end (move/cancel/fail) re-anchor back to the repo root; the worktree + branch stay for review.
+3. **Task** — verify project, prepare (or reclaim) the ticket's worktree on `run/{id}` (reconstructing from `(branch, head_sha)` when the ticket has history), `chdir` into it, create a session, send the server-rendered prompt verbatim. On stage end the worktree is committed and pushed to `run/{id}`, the SHA is recorded on the ticket, then the plugin re-anchors back to the repo root; the worktree + branch stay for review.
 4. **Ask** — `POST /api/tickets/{id}/ask` then long-poll `GET /api/questions/{qid}`. Fast path returns the answer; slow path returns "no answer yet" and the answer arrives as a new message.
 5. **Permission** — the `event` hook receives `permission.asked`, read-only checks auto-allow, the rest are forwarded to the server via `/permission-request` (which blocks until a human decides).
 

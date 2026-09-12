@@ -3,7 +3,7 @@ import { loadConfig, hasEnvEnlistment, resolveProjectId } from "./config.ts";
 import { AlmadelClient } from "./http.ts";
 import { createState } from "./state.ts";
 import { registerAgent } from "./register.ts";
-import { pollLoop } from "./jobs.ts";
+import { pollLoop, checkpointStage } from "./jobs.ts";
 import { realGit, returnToRepoRoot } from "./git.ts";
 import { makeAlmadelTools, type JoinArgs } from "./tools.ts";
 import { decidePermission } from "./permission.ts";
@@ -20,7 +20,10 @@ export interface OpencodeClient {
     create(input: { body: { title?: string } }): Promise<{ data?: { id: string } }>;
     promptAsync(input: {
       path: { id: string };
-      body: { parts: { type: "text"; text: string }[] };
+      body: {
+        parts: { type: "text"; text: string }[];
+        model?: { providerID: string; modelID: string };
+      };
     }): Promise<unknown>;
     abort(input: { path: { id: string } }): Promise<unknown>;
   };
@@ -33,6 +36,15 @@ export interface OpencodeClient {
 function log(msg: string) {
   // eslint-disable-next-line no-console
   console.error(`[almadel] ${msg}`);
+}
+
+// Splits an opencode model ref ("providerID/modelID") on the first "/" into the
+// shape promptAsync expects. Returns undefined for null/empty (slot default).
+export function parseModel(ref: string | null): { providerID: string; modelID: string } | undefined {
+  if (!ref) return undefined;
+  const idx = ref.indexOf("/");
+  if (idx === -1) return { providerID: ref, modelID: "" };
+  return { providerID: ref.slice(0, idx), modelID: ref.slice(idx + 1) };
 }
 
 export const AlmadelPlugin: Plugin = async (input: PluginInput) => {
@@ -87,6 +99,9 @@ export const AlmadelPlugin: Plugin = async (input: PluginInput) => {
     state.projectId = null;
     state.currentTicket = null;
     state.currentSession = null;
+    state.currentModel = null;
+    state.currentWorktree = null;
+    state.currentBranch = null;
     state.status = "idle";
     state.board = null;
     return `left ${state.serverUrl ?? "server"}`;
@@ -108,7 +123,7 @@ export const AlmadelPlugin: Plugin = async (input: PluginInput) => {
     );
   }
 
-  async function dispatchPrompt(prompt: string, ticket: string, branch: string) {
+  async function dispatchPrompt(prompt: string, ticket: string, branch: string, model: string | null) {
     const created = await client.session.create({
       body: { title: `almadel ${ticket}` },
     });
@@ -118,10 +133,14 @@ export const AlmadelPlugin: Plugin = async (input: PluginInput) => {
       return;
     }
     state.currentSession = sessionId;
+    state.currentModel = model;
     pipeline = new EventPipeline(http, ticket, log);
     await client.session.promptAsync({
       path: { id: sessionId },
-      body: { parts: [{ type: "text", text: prompt }] },
+      body: {
+        parts: [{ type: "text", text: prompt }],
+        model: parseModel(model),
+      },
     });
     logVerbose(`dispatched ${ticket} on branch ${branch} -> session ${sessionId}`);
   }
@@ -134,7 +153,10 @@ export const AlmadelPlugin: Plugin = async (input: PluginInput) => {
     }
     await client.session.promptAsync({
       path: { id: sessionId },
-      body: { parts: [{ type: "text", text }] },
+      body: {
+        parts: [{ type: "text", text }],
+        model: parseModel(state.currentModel),
+      },
     });
   }
 
@@ -166,6 +188,17 @@ export const AlmadelPlugin: Plugin = async (input: PluginInput) => {
     if (state.currentSession) {
       await client.session.abort({ path: { id: state.currentSession } });
     }
+    // Checkpoint-commit before re-anchoring so the stage survives a requeue.
+    await checkpointStage({
+      git: realGit,
+      worktree: state.currentWorktree,
+      ticket: state.currentTicket,
+      branch: state.currentBranch,
+      column: "cancelled",
+      label: cfg.label,
+      gitRemote: cfg.gitRemote,
+      log,
+    });
     // Re-anchor to the primary checkout; the ticket worktree is kept for review.
     try {
       await returnToRepoRoot(realGit, cfg.repoRoot);
@@ -173,7 +206,9 @@ export const AlmadelPlugin: Plugin = async (input: PluginInput) => {
       log(`re-anchor on cancel failed: ${String(err)}`);
     }
     state.currentWorktree = null;
+    state.currentBranch = null;
     state.currentSession = null;
+    state.currentModel = null;
     state.currentTicket = null;
     state.status = "idle";
     state.pendingRecycle = false;
@@ -227,6 +262,8 @@ export const AlmadelPlugin: Plugin = async (input: PluginInput) => {
     state,
     git: realGit,
     repoRoot: cfg.repoRoot,
+    label: cfg.label,
+    gitRemote: cfg.gitRemote,
     enlist,
     leave,
     status,
@@ -263,7 +300,27 @@ export const AlmadelPlugin: Plugin = async (input: PluginInput) => {
         pipeline?.enqueue("permission.replied", e.properties);
         return;
       }
-      if (e.type === "session.error" || e.type === "session.idle") {
+      if (e.type === "session.idle") {
+        if (state.pendingRecycle) {
+          await recycleSlot();
+        } else {
+          // An agent can end a stage by going quiet without ever calling
+          // almadel_move. Checkpoint a dirty worktree so work is never stranded.
+          await checkpointStage({
+            git: realGit,
+            worktree: state.currentWorktree,
+            ticket: state.currentTicket,
+            branch: state.currentBranch,
+            column: "idle",
+            label: cfg.label,
+            gitRemote: cfg.gitRemote,
+            log,
+          });
+        }
+        pipeline?.enqueue(e.type, e.properties);
+        return;
+      }
+      if (e.type === "session.error") {
         if (state.pendingRecycle) {
           await recycleSlot();
         }

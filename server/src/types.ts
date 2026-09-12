@@ -45,6 +45,7 @@ export interface Column {
   name: string
   position: number
   prompt: string | null // NULL = human gate
+  model: string | null // NULL = inherit the slot's default model
   next_column: string | null
   fail_column: string | null
   wip_limit: number | null
@@ -58,6 +59,7 @@ export interface Ticket {
   column_id: string
   state: TicketState
   branch: string | null
+  head_sha: string | null
   agent_id: string | null
   priority: number
   claimed_at: number | null
@@ -162,7 +164,7 @@ export interface TicketThread {
 // The claim union (§8). New tickets, replies into held sessions, and permission
 // decisions all arrive through this one channel.
 export type Job =
-  | { type: "task"; project: string; ticket: string; prompt: string; branch: string }
+  | { type: "task"; project: string; ticket: string; prompt: string; branch: string; model: string | null; base_sha: string | null }
   | { type: "reply"; project: string; ticket: string; text: string }
   | { type: "permission"; project: string; ticket: string; permission_id: string; decision: PermissionDecision; scope: PermissionScope }
   | { type: "cancel"; project: string; ticket: string }
@@ -210,6 +212,7 @@ export const createTicketSchema = z.object({
 export const moveTicketSchema = z.object({
   column: z.string().min(1),
   note: z.string().max(2000).optional(),
+  head_sha: z.string().nullable().optional(),
 })
 
 export const commentSchema = z.object({
@@ -250,6 +253,7 @@ export const columnInputSchema = z.object({
   id: z.string().optional(),
   name: z.string(),
   prompt: z.string().nullable(),
+  model: z.string().nullable(),
   next_column: z.string().nullable(),
   fail_column: z.string().nullable(),
   wip_limit: z.number().nullable(),

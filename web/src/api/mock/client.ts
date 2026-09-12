@@ -194,7 +194,7 @@ export class MockClient implements AlmadelClient {
     this.broadcastRoster()
   }
 
-  async updateColumns(projectId: string, columns: Array<Partial<{ id: string; name: string; prompt: string | null; next_column: string | null; fail_column: string | null; wip_limit: number | null }>>) {
+  async updateColumns(projectId: string, columns: Array<Partial<{ id: string; name: string; prompt: string | null; model: string | null; next_column: string | null; fail_column: string | null; wip_limit: number | null }>>) {
     await delay()
     this.store.updateColumns(projectId, columns)
     this.broadcastBoard(projectId)

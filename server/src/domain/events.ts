@@ -1,4 +1,4 @@
-import { broadcastTicket } from "../notify"
+import { broadcastRoster, broadcastTicket } from "../notify"
 import { now } from "../db"
 import type { DB } from "../db"
 import { HttpError } from "../http-error"
@@ -36,7 +36,10 @@ export function appendEvents(
   })
   run()
 
-  if (rows.length > 0) broadcastTicket(ticketId, JSON.stringify(rows))
+  if (rows.length > 0) {
+    broadcastTicket(ticketId, JSON.stringify(rows))
+    broadcastRoster()
+  }
   return rows
 }
 

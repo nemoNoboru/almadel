@@ -13,6 +13,7 @@ export interface CreateTicketInput {
 export interface ColumnInput {
   name: string
   prompt: string | null
+  model: string | null
   next_column: string | null
   fail_column: string | null
   wip_limit: number | null

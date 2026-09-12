@@ -17,8 +17,8 @@ export function Roster() {
   if (!roster) return <div className="w-56 shrink-0 border-r" />
 
   return (
-    <aside className="flex w-56 shrink-0 flex-col border-r">
-      <ScrollArea className="flex-1">
+    <aside className="flex min-h-0 w-56 shrink-0 flex-col border-r">
+      <ScrollArea className="min-h-0 flex-1">
         <div className="flex flex-col gap-1 p-2">
           {roster.projects.map((group) => (
             <div key={group.project.id} className="flex flex-col gap-0.5">

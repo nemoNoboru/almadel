@@ -146,6 +146,7 @@ export function makeTaskJob(db: DB, ticket: Ticket, agentId: string): Job {
     "ticket.body": ticket.body ?? "",
     thread: buildThread(comments),
     branch: ticket.branch ?? `run/${ticket.id}`,
+    "base_sha": ticket.head_sha ?? "",
     project: ticket.project_id,
     remote: project?.git_remote ?? "",
     port_base: String(agent?.port_base ?? ""),
@@ -159,5 +160,7 @@ export function makeTaskJob(db: DB, ticket: Ticket, agentId: string): Job {
     ticket: ticket.id,
     prompt,
     branch: ticket.branch ?? `run/${ticket.id}`,
+    model: column?.model ?? null,
+    base_sha: ticket.head_sha,
   }
 }
