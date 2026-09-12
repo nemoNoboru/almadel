@@ -248,6 +248,36 @@ export function nextTicketId(db: Database): string {
 // Seeding: a fresh DB gets one default project with the §4.1 board.
 // ---------------------------------------------------------------------------
 
+// The default §4.1 board: 7 columns (Spec → Planning → Review → Implement →
+// Testing → Done/Failed). next_column / fail_column reference column *names*
+// (per vision.md §4.1), which is also what the column editor sends on save.
+export interface DefaultColumn {
+  name: string
+  prompt: string | null
+  next: string | null
+  fail: string | null
+  wip: number | null
+}
+
+export const DEFAULT_BOARD_COLUMNS: DefaultColumn[] = [
+  { name: "Spec", prompt: null, next: "Planning", fail: null, wip: null },
+  { name: "Planning", prompt: "Read ticket {{ticket.id}} and produce an implementation plan.\nDo not write code. Post the plan with kind=\"plan\", then move to Review.", next: "Review", fail: "Failed", wip: 2 },
+  { name: "Review", prompt: null, next: "Implement", fail: null, wip: null },
+  { name: "Implement", prompt: "Ticket {{ticket.id}}. The approved plan is in the thread below.\nImplement it on branch {{branch}}. Run the test suite before finishing.\nDev servers must bind ports starting at {{port_base}}.\nCommit your work on {{branch}}, push it, and open a pull request. Remote: {{remote}}.", next: "Testing", fail: "Failed", wip: 2 },
+  { name: "Testing", prompt: "Ticket {{ticket.id}}. Verify the change on branch {{branch}}.\nRun the full test suite. Report results, then move to Done.\nCommit any fixes on {{branch}} and push them.", next: "Done", fail: "Failed", wip: 2 },
+  { name: "Done", prompt: null, next: null, fail: null, wip: null },
+  { name: "Failed", prompt: null, next: null, fail: null, wip: null },
+]
+
+export function insertDefaultBoard(db: Database, projectId: string, ids?: string[]): void {
+  DEFAULT_BOARD_COLUMNS.forEach((col, position) => {
+    const id = ids?.[position] ?? newId("col")
+    db.query(
+      "INSERT INTO columns (id, project_id, name, position, prompt, next_column, fail_column, wip_limit) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    ).run(id, projectId, col.name, position, col.prompt, col.next, col.fail, col.wip)
+  })
+}
+
 export function seed(db: Database): void {
   const count = (db.query("SELECT count(*) AS n FROM projects").get() as { n: number }).n
   if (count > 0) return
@@ -260,23 +290,15 @@ export function seed(db: Database): void {
       "INSERT INTO projects (id, name, git_remote, default_branch, created_at) VALUES (?, ?, ?, ?, ?)",
     ).run(projectId, "almadel-api", null, "main", ts)
 
-    // next_column / fail_column reference column *names* (per vision.md §4.1),
-    // which is also what the column editor sends on save.
-    const cols: Array<[string, string, number, string | null, string | null, string | null, number | null]> = [
-      ["col-spec", "Spec", 0, null, "Planning", null, null],
-      ["col-planning", "Planning", 1, "Read ticket {{ticket.id}} and produce an implementation plan.\nDo not write code. Post the plan with kind=\"plan\", then move to Review.", "Review", "Failed", 2],
-      ["col-review", "Review", 2, null, "Implement", null, null],
-      ["col-implement", "Implement", 3, "Ticket {{ticket.id}}. The approved plan is in the thread below.\nImplement it on branch {{branch}}. Run the test suite before finishing.\nDev servers must bind ports starting at {{port_base}}.\nCommit your work on {{branch}}, push it, and open a pull request. Remote: {{remote}}.", "Testing", "Failed", 2],
-      ["col-testing", "Testing", 4, "Ticket {{ticket.id}}. Verify the change on branch {{branch}}.\nRun the full test suite. Report results, then move to Done.\nCommit any fixes on {{branch}} and push them.", "Done", "Failed", 2],
-      ["col-done", "Done", 5, null, null, null, null],
-      ["col-failed", "Failed", 6, null, null, null, null],
-    ]
-
-    for (const [id, name, position, prompt, next, fail, wip] of cols) {
-      db.query(
-        "INSERT INTO columns (id, project_id, name, position, prompt, next_column, fail_column, wip_limit) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-      ).run(id, projectId, name, position, prompt, next, fail, wip)
-    }
+    insertDefaultBoard(db, projectId, [
+      "col-spec",
+      "col-planning",
+      "col-review",
+      "col-implement",
+      "col-testing",
+      "col-done",
+      "col-failed",
+    ])
   })
   run()
 }

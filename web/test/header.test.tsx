@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { fireEvent, screen, waitFor } from "@testing-library/react"
+import { fireEvent, screen, waitFor, within } from "@testing-library/react"
 import { renderWithApp, makeState } from "./utils"
 import { Header } from "@/components/layout/Header"
 
@@ -28,6 +28,15 @@ describe("Header", () => {
   test("renders the theme toggle button", () => {
     renderWithApp(<Header />)
     expect(screen.getByRole("button", { name: /toggle theme/i })).toBeInTheDocument()
+  })
+
+  test("opens the new-project dialog", async () => {
+    renderWithApp(<Header />)
+    fireEvent.click(screen.getByRole("button", { name: /new project/i }))
+    const dialog = await screen.findByRole("dialog")
+    expect(dialog).toBeInTheDocument()
+    expect(within(dialog).getByLabelText("Name")).toBeInTheDocument()
+    expect(within(dialog).getByLabelText("Origin URL")).toBeInTheDocument()
   })
 
   test("clicking the theme toggle flips the theme", async () => {

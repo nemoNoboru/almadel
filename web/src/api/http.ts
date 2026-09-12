@@ -1,6 +1,6 @@
 import type { AlmadelClient, Message, StreamEvent, SubscribeHandle, TicketDraft } from "./client"
 import { ApiError } from "./client"
-import type { Board, Roster, TicketThread } from "@/types/domain"
+import type { Board, Project, Roster, TicketThread } from "@/types/domain"
 
 // Real HTTP client targeting the browser-facing API (plan/03-api-surface.md).
 // The server is a single process serving JSON + SSE from the same origin, so
@@ -58,6 +58,13 @@ export class HttpClient implements AlmadelClient {
     await request(`/api/agents/${agentId}/messages`, {
       method: "POST",
       body: JSON.stringify({ body }),
+    })
+  }
+
+  async createProject(input: { name: string; git_remote?: string | null; default_branch?: string }) {
+    return request<Project>("/api/projects", {
+      method: "POST",
+      body: JSON.stringify(input),
     })
   }
 

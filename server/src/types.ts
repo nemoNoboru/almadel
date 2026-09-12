@@ -202,6 +202,14 @@ export const claimBodySchema = z.object({
     .optional(),
 })
 
+export const createProjectSchema = z.object({
+  name: z.string().min(1),
+  git_remote: z.string().nullable().optional(),
+  default_branch: z.string().optional(),
+})
+
+export type CreateProjectInput = z.infer<typeof createProjectSchema>
+
 export const createTicketSchema = z.object({
   project_id: z.string().min(1),
   title: z.string().min(1),

@@ -28,6 +28,24 @@ const LEASE_TTL = 90_000
 // Deep-copy the seed arrays so the store is isolated per load.
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v)) as T
 
+// The default board given to newly created projects, mirroring the server's
+// insertDefaultBoard (Spec → Planning → Review → Implement → Testing → Done/Failed).
+const DEFAULT_BOARD: Array<{
+  name: string
+  prompt: string | null
+  next: string | null
+  fail: string | null
+  wip: number | null
+}> = [
+  { name: "Spec", prompt: null, next: "Planning", fail: null, wip: null },
+  { name: "Planning", prompt: "Read ticket {{ticket.id}} and produce an implementation plan.\nDo not write code. Post the plan with kind=\"plan\", then move to Review.", next: "Review", fail: "Failed", wip: 2 },
+  { name: "Review", prompt: null, next: "Implement", fail: null, wip: null },
+  { name: "Implement", prompt: "Ticket {{ticket.id}}. The approved plan is in the thread below.\nImplement it on branch {{branch}}. Run the test suite before finishing.\nDev servers must bind ports starting at {{port_base}}.", next: "Testing", fail: "Failed", wip: 2 },
+  { name: "Testing", prompt: "Ticket {{ticket.id}}. Verify the change on branch {{branch}}.\nRun the full test suite. Report results, then move to Done.", next: "Done", fail: "Failed", wip: 2 },
+  { name: "Done", prompt: null, next: null, fail: null, wip: null },
+  { name: "Failed", prompt: null, next: null, fail: null, wip: null },
+]
+
 class Store {
   projects: Project[] = clone(seedProjects)
   columns: Column[] = clone(seedColumns)
@@ -41,6 +59,7 @@ class Store {
   private nextCommentId = 100
   private nextTicketNum = 430
   private nextQuestionId = 100
+  private nextProjectId = 1
 
   // ---- derived reads -------------------------------------------------------
 
@@ -102,6 +121,35 @@ class Store {
   }
 
   // ---- mutations -----------------------------------------------------------
+
+  createProject(input: { name: string; git_remote?: string | null; default_branch?: string }): Project {
+    if (this.projects.some((p) => p.name === input.name)) {
+      throw new Error("project name already exists")
+    }
+    const id = `prj_${this.nextProjectId++}`
+    const project: Project = {
+      id,
+      name: input.name,
+      git_remote: input.git_remote ?? null,
+      default_branch: input.default_branch ?? "main",
+      created_at: Date.now(),
+    }
+    this.projects.push(project)
+    DEFAULT_BOARD.forEach((col, position) => {
+      this.columns.push({
+        id: `col-${id}-${position}`,
+        project_id: id,
+        name: col.name,
+        position,
+        prompt: col.prompt,
+        model: null,
+        next_column: col.next,
+        fail_column: col.fail,
+        wip_limit: col.wip,
+      })
+    })
+    return project
+  }
 
   createTicket(projectId: string, title: string, body: string, columnId: string): void {
     const id = `TCK-${this.nextTicketNum++}`

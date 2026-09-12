@@ -41,6 +41,31 @@ describe("MockClient queries", () => {
 })
 
 describe("MockClient mutations", () => {
+  test("createProject adds a project with the default board", async () => {
+    const client = new MockClient()
+    const project = await client.createProject({
+      name: "acme",
+      git_remote: "git@github.com:acme/acme.git",
+    })
+    expect(project.id).toMatch(/^prj_/)
+    expect(project.default_branch).toBe("main")
+
+    const board = await client.getBoard(project.id)
+    expect(board.columns.map((c) => c.name)).toEqual([
+      "Spec", "Planning", "Review", "Implement", "Testing", "Done", "Failed",
+    ])
+
+    const projects = await client.listProjects()
+    expect(projects.map((p) => p.name)).toContain("acme")
+  })
+
+  test("createProject rejects a duplicate name", async () => {
+    const client = new MockClient()
+    await expect(client.createProject({ name: "almadel-api" })).rejects.toThrow(
+      "project name already exists",
+    )
+  })
+
   test("createTicket then getBoard shows it", async () => {
     const client = new MockClient()
     await client.createTicket({

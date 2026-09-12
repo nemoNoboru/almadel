@@ -108,6 +108,13 @@ export class MockClient implements AlmadelClient {
     }, 1500)
   }
 
+  async createProject(input: { name: string; git_remote?: string | null; default_branch?: string }) {
+    await delay()
+    const project = this.store.createProject(input)
+    this.broadcastRoster()
+    return project
+  }
+
   async createTicket(input: {
     project_id: string
     title: string
