@@ -9,6 +9,8 @@ function deps(overrides: Partial<ToolDeps> = {}): ToolDeps {
     state: createState(),
     git: {} as never,
     repoRoot: "/tmp",
+    label: "test",
+    gitRemote: null,
     getBoard: async () => [
       { id: "col-spec", name: "Spec", prompt: null },
       { id: "col-implement", name: "Implement", prompt: "do it" },

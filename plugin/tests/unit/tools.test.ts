@@ -18,7 +18,7 @@ const deps = (client: AlmadelClient, state: ReturnType<typeof createState>, git:
     repoRoot: "/repo",
     label: "laptop",
     gitRemote: "https://example.com/repo.git",
-    getBoard: async () => [{ id: "done", name: "Done" }],
+    getBoard: async () => [{ id: "done", name: "Done", prompt: null }],
     enlist: async () => "",
     leave: async () => "",
     status: async () => "",
