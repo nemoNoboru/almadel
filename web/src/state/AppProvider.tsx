@@ -35,6 +35,8 @@ export interface AppState {
   loadingThread: boolean
   loadingMessages: boolean
   error: string | null
+  rosterCollapsed: boolean
+  chatCollapsed: boolean
 
   selectProject: (id: string) => void
   selectTicket: (id: string) => void
@@ -42,6 +44,8 @@ export interface AppState {
   closeConversation: () => void
   closeAgentChat: () => void
   sendAgentMessage: (agentId: string, body: string) => Promise<void>
+  toggleRoster: () => void
+  toggleChat: () => void
   moveTicket: (ticketId: string, columnId: string, opts?: MoveOptions) => Promise<void>
   createTicket: (input: {
     project_id: string
@@ -65,6 +69,27 @@ const AppContext = createContext<AppState | null>(null)
 
 export { AppContext }
 
+const COLLAPSE_KEYS = {
+  roster: "almadel.rosterCollapsed",
+  chat: "almadel.chatCollapsed",
+} as const
+
+function readCollapsed(key: string): boolean {
+  try {
+    return localStorage.getItem(key) === "1"
+  } catch {
+    return false
+  }
+}
+
+function writeCollapsed(key: string, value: boolean) {
+  try {
+    localStorage.setItem(key, value ? "1" : "0")
+  } catch {
+    // Persistence is best-effort; ignore storage failures (private mode, etc).
+  }
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [projects, setProjects] = useState<ProjectRef[]>([])
   const [roster, setRoster] = useState<Roster | null>(null)
@@ -79,6 +104,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [loadingThread, setLoadingThread] = useState(false)
   const [loadingMessages, setLoadingMessages] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [rosterCollapsed, setRosterCollapsed] = useState(() => readCollapsed(COLLAPSE_KEYS.roster))
+  const [chatCollapsed, setChatCollapsed] = useState(() => readCollapsed(COLLAPSE_KEYS.chat))
 
   // Refs so stream callbacks read current values without re-subscribing.
   const selectedTicketRef = useRef<string | null>(null)
@@ -209,6 +236,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const closeAgentChat = useCallback(() => {
     setSelectedAgentId(null)
     setMessages([])
+  }, [])
+
+  const toggleRoster = useCallback(() => {
+    setRosterCollapsed((prev) => {
+      writeCollapsed(COLLAPSE_KEYS.roster, !prev)
+      return !prev
+    })
+  }, [])
+
+  const toggleChat = useCallback(() => {
+    setChatCollapsed((prev) => {
+      writeCollapsed(COLLAPSE_KEYS.chat, !prev)
+      return !prev
+    })
   }, [])
 
   const sendAgentMessage = useCallback(
@@ -342,12 +383,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadingThread,
       loadingMessages,
       error,
+      rosterCollapsed,
+      chatCollapsed,
       selectProject,
       selectTicket,
       selectAgent,
       closeConversation,
       closeAgentChat,
       sendAgentMessage,
+      toggleRoster,
+      toggleChat,
       moveTicket,
       createTicket,
       reply,
@@ -371,12 +416,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadingThread,
       loadingMessages,
       error,
+      rosterCollapsed,
+      chatCollapsed,
       selectProject,
       selectTicket,
       selectAgent,
       closeConversation,
       closeAgentChat,
       sendAgentMessage,
+      toggleRoster,
+      toggleChat,
       moveTicket,
       createTicket,
       reply,
