@@ -249,6 +249,15 @@ describe("registration", () => {
     ).toThrow()
   })
 
+  test("names the worker after its label", () => {
+    const db = testDb()
+    const result = registerAgent(db, {
+      project: "almadel-api", repo_root: "/srv/slots/1", label: "laptop",
+      opencode_version: "1.5.0", capabilities: { tools: true, permission_hook: true },
+    }, { minOpencodeVersion: "1.0.0", portBase: 8000, portBandWidth: 100 })
+    expect(result.name).toBe("laptop")
+  })
+
   test("upserts on (project_id, repo_root, label) and keeps the display name", () => {
     const db = testDb()
     const opts = { minOpencodeVersion: "1.0.0", portBase: 8000, portBandWidth: 100 }
