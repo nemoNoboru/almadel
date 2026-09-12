@@ -196,6 +196,7 @@ export function makeState(overrides: Partial<AppState> = {}): AppState {
     cancel: async () => {},
     takeover: async () => {},
     updateColumns: async () => {},
+    createProject: async () => ({ id: "prj_1" }),
     ...overrides,
   }
 }

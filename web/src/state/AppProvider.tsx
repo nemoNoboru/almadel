@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react"
 import { client } from "@/api"
-import type { Message } from "@/api/client"
+import type { CreateProjectInput, Message } from "@/api/client"
 import type { Column, Roster, Board, TicketThread } from "@/types/domain"
 
 interface ProjectRef {
@@ -59,6 +59,7 @@ export interface AppState {
   cancel: (ticketId: string) => Promise<void>
   takeover: (ticketId: string) => Promise<void>
   updateColumns: (projectId: string, columns: Column[]) => Promise<void>
+  createProject: (input: CreateProjectInput) => Promise<{ id: string }>
 }
 
 const AppContext = createContext<AppState | null>(null)
@@ -327,6 +328,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [refreshBoard],
   )
 
+  const createProject = useCallback(
+    async (input: CreateProjectInput) => {
+      const project = await client.createProject(input)
+      const ps = await client.listProjects()
+      setProjects(ps)
+      setSelectedProjectId(project.id)
+      refreshRoster()
+      return { id: project.id }
+    },
+    [refreshRoster],
+  )
+
   const value = useMemo<AppState>(
     () => ({
       projects,
@@ -356,6 +369,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       cancel,
       takeover,
       updateColumns,
+      createProject,
     }),
     [
       projects,
@@ -385,6 +399,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       cancel,
       takeover,
       updateColumns,
+      createProject,
     ],
   )
 

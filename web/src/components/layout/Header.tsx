@@ -1,6 +1,7 @@
+import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useTheme } from "next-themes"
-import { MoonIcon, SunIcon, FlameIcon } from "lucide-react"
+import { MoonIcon, SunIcon, FlameIcon, PlusIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -13,11 +14,13 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { useApp } from "@/state/AppProvider"
 import { isMock } from "@/api"
+import { NewProjectDialog } from "@/components/layout/NewProjectDialog"
 
 export function Header() {
   const { projects, selectedProjectId, roster, selectProject } = useApp()
   const navigate = useNavigate()
   const { resolvedTheme, setTheme } = useTheme()
+  const [newProjectOpen, setNewProjectOpen] = useState(false)
 
   const needsYou = roster?.needs_you ?? 0
 
@@ -56,6 +59,15 @@ export function Header() {
 
       <div className="flex-1" />
 
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setNewProjectOpen(true)}
+      >
+        <PlusIcon data-icon="inline-start" />
+        New project
+      </Button>
+
       {needsYou > 0 && (
         <Badge className="bg-warning/15 text-warning-foreground dark:text-warning">
           <FlameIcon className="size-3" data-icon="inline-start" />
@@ -72,6 +84,8 @@ export function Header() {
         <SunIcon className="hidden dark:block" data-icon="inline-start" />
         <MoonIcon className="dark:hidden" data-icon="inline-start" />
       </Button>
+
+      <NewProjectDialog open={newProjectOpen} onOpenChange={setNewProjectOpen} />
     </header>
   )
 }

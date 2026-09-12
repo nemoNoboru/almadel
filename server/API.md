@@ -76,6 +76,22 @@ SSE. Broadcasts `event: roster`, `data: {}` whenever the roster changes.
 [ { "id": "almadel-api", "name": "almadel-api" } ]
 ```
 
+#### `POST /api/projects`
+
+Creates a project and seeds its default 7-column board (Spec → Planning →
+Review → Implement → Testing → Done/Failed). Body:
+
+```json
+{ "name": "my-project", "git_remote": "git@github.com:me/my-project.git", "default_branch": "main" }
+```
+
+- `name` is required and must be unique (`409 project name already exists`).
+- `git_remote` is optional (nullable) — the origin agents must match when they
+  register so they can clone the repository next.
+- `default_branch` is optional and defaults to `"main"`.
+- Returns `201` with the full project `{ id, name, git_remote, default_branch, created_at }`.
+- `400` with `issues` if the body is invalid.
+
 #### `GET /api/projects/{id}/board`
 
 `404 project not found` if unknown. Otherwise `{ project, columns[], tickets[] }`.

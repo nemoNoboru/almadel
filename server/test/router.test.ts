@@ -108,6 +108,36 @@ describe("roster + projects", () => {
     expect(await res!.json()).toEqual([{ id: "almadel-api", name: "almadel-api" }])
   })
 
+  test("POST /api/projects creates a project with the default board", async () => {
+    const db = testDb()
+    const res = await api(db, config, "POST", "/api/projects", {
+      body: { name: "acme", git_remote: "git@github.com:acme/acme.git" },
+    })
+    expect(res!.status).toBe(201)
+    const project = await res!.json()
+    expect(project.id).toMatch(/^prj_/)
+    expect(project.name).toBe("acme")
+    expect(project.git_remote).toBe("git@github.com:acme/acme.git")
+    expect(project.default_branch).toBe("main")
+
+    const boardRes = await api(db, config, "GET", `/api/projects/${project.id}/board`)
+    expect(boardRes!.status).toBe(200)
+    const board = await boardRes!.json()
+    expect(board.columns.map((c: { name: string }) => c.name)).toEqual([
+      "Spec", "Planning", "Review", "Implement", "Testing", "Done", "Failed",
+    ])
+  })
+
+  test("POST /api/projects 400s on invalid body and 409s on duplicate name", async () => {
+    const db = testDb()
+    const bad = await api(db, config, "POST", "/api/projects", { body: {} })
+    expect(bad!.status).toBe(400)
+    expect((await bad!.json()).error).toBe("invalid project")
+
+    const dup = await api(db, config, "POST", "/api/projects", { body: { name: "almadel-api" } })
+    expect(dup!.status).toBe(409)
+  })
+
   test("GET /api/projects/{id}/board 404s for unknown project", async () => {
     const res = await api(testDb(), config, "GET", "/api/projects/nope/board")
     expect(res!.status).toBe(404)

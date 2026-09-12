@@ -1,8 +1,8 @@
 import { agentJobs, broadcastRoster, broadcastTicket, projectClaim } from "../notify"
-import { mapColumn, mapComment, mapProject, nextTicketId, now } from "../db"
+import { insertDefaultBoard, mapColumn, mapComment, mapProject, newId, nextTicketId, now } from "../db"
 import type { DB } from "../db"
 import { HttpError } from "../http-error"
-import type { Board, Column, Comment, CommentAuthor, CommentKind, Ticket, TicketState } from "../types"
+import type { Board, Column, Comment, CommentAuthor, CommentKind, CreateProjectInput, Project, Ticket, TicketState } from "../types"
 
 // ---------------------------------------------------------------------------
 // Column classification
@@ -35,6 +35,28 @@ export function listProjects(db: DB) {
   return (
     db.query("SELECT * FROM projects ORDER BY name ASC").all() as Record<string, unknown>[]
   ).map((r) => mapProject(r)!)
+}
+
+export function createProject(db: DB, input: CreateProjectInput): Project {
+  const existing = db.query("SELECT id FROM projects WHERE name = ?").get(input.name) as
+    | { id: string }
+    | undefined
+  if (existing) throw new HttpError(409, "project name already exists")
+
+  const id = newId("prj")
+  const gitRemote = input.git_remote ?? null
+  const defaultBranch = input.default_branch ?? "main"
+  const ts = now()
+
+  db.transaction(() => {
+    db.query(
+      "INSERT INTO projects (id, name, git_remote, default_branch, created_at) VALUES (?, ?, ?, ?, ?)",
+    ).run(id, input.name, gitRemote, defaultBranch, ts)
+    insertDefaultBoard(db, id)
+  })()
+
+  broadcastRoster()
+  return getProject(db, id)!
 }
 
 export function getColumn(db: DB, id: string): Column | null {

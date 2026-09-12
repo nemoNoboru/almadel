@@ -7,7 +7,7 @@ import { askQuestion, decidePermission, reply, requestPermission } from "../src/
 import { claimNow, makeTaskJob } from "../src/domain/claim"
 import { sweep } from "../src/domain/lease"
 import { roster, thread } from "../src/domain/roster"
-import { board, cancelTicket, createTicket, getTicket, moveTicket } from "../src/domain/tickets"
+import { board, cancelTicket, createProject, createTicket, getTicket, moveTicket } from "../src/domain/tickets"
 
 function testDb(): Database {
   const db = new Database(":memory:")
@@ -38,6 +38,39 @@ describe("seeding", () => {
     const b = board(db, "almadel-api")!
     expect(b.project.id).toBe("almadel-api")
     expect(b.columns.map((c) => c.name)).toEqual(["Spec", "Planning", "Review", "Implement", "Testing", "Done", "Failed"])
+  })
+})
+
+describe("createProject", () => {
+  test("inserts a project with the default 7-column board", () => {
+    const db = testDb()
+    const p = createProject(db, { name: "acme", git_remote: "git@github.com:acme/acme.git" })
+    expect(p.id).toMatch(/^prj_/)
+    expect(p.name).toBe("acme")
+    expect(p.git_remote).toBe("git@github.com:acme/acme.git")
+    expect(p.default_branch).toBe("main")
+
+    const b = board(db, p.id)!
+    expect(b.columns.map((c) => c.name)).toEqual(["Spec", "Planning", "Review", "Implement", "Testing", "Done", "Failed"])
+    expect(b.tickets).toEqual([])
+  })
+
+  test("defaults git_remote to null and default_branch to main", () => {
+    const db = testDb()
+    const p = createProject(db, { name: "no-remote" })
+    expect(p.git_remote).toBeNull()
+    expect(p.default_branch).toBe("main")
+  })
+
+  test("honors an explicit default_branch", () => {
+    const db = testDb()
+    const p = createProject(db, { name: "trunk", default_branch: "trunk" })
+    expect(p.default_branch).toBe("trunk")
+  })
+
+  test("rejects a duplicate project name", () => {
+    const db = testDb()
+    expect(() => createProject(db, { name: "almadel-api" })).toThrow()
   })
 })
 

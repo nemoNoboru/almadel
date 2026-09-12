@@ -10,6 +10,7 @@ import {
   columnsPutSchema,
   commentSchema,
   commentUpdateSchema,
+  createProjectSchema,
   createTicketSchema,
   draftSchema,
   eventBatchSchema,
@@ -37,6 +38,7 @@ import {
   addComment,
   board,
   cancelTicket,
+  createProject,
   createTicket,
   getProject,
   getTicket,
@@ -161,6 +163,12 @@ export async function handleApi(
     // ---- projects ----------------------------------------------------------
     if (method === "GET" && path === "/api/projects") {
       return json(listProjects(db).map((p) => ({ id: p.id, name: p.name })))
+    }
+
+    if (method === "POST" && path === "/api/projects") {
+      const parsed = createProjectSchema.safeParse(await readJson(request))
+      if (!parsed.success) return error(400, "invalid project", zodIssues(parsed.error))
+      return json(createProject(db, parsed.data), 201)
     }
 
     const boardMatch = method === "GET" && /^\/api\/projects\/([^/]+)\/board$/.exec(path)
