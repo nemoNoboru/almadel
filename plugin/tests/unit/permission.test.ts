@@ -65,4 +65,31 @@ describe("decidePermission", () => {
     const c = clientFor({ decision: "deny", scope: "once", timeout: true });
     expect((await decidePermission(c, state, req("bash"))).response).toBe("reject");
   });
+
+  test("destructive git commands are hard-denied without escalation", async () => {
+    const state = createState();
+    state.currentTicket = "t1";
+    const c = {
+      requestPermission: async () => {
+        throw new Error("must not escalate");
+      },
+    } as unknown as AlmadelClient;
+    for (const cmd of [
+      "git checkout -f main",
+      "git reset --hard HEAD~1",
+      "git switch other",
+      "git rebase main",
+      "git stash pop",
+      "git worktree add /tmp/x",
+    ]) {
+      expect((await decidePermission(c, state, req(cmd))).response).toBe("reject");
+    }
+  });
+
+  test("non-destructive bash still escalates", async () => {
+    const state = createState();
+    state.currentTicket = "t1";
+    const c = clientFor({ decision: "allow", scope: "once" });
+    expect((await decidePermission(c, state, req("git commit -m x"))).response).toBe("once");
+  });
 });

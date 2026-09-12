@@ -143,6 +143,9 @@ ALTER TABLE comments ADD COLUMN updated_at INTEGER;
 `
 ALTER TABLE columns ADD COLUMN model TEXT;
 `,
+`
+ALTER TABLE tickets ADD COLUMN head_sha TEXT;
+`,
 ]
 
 export function openDb(path: string): Database {

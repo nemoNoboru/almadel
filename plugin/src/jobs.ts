@@ -2,7 +2,13 @@ import type { AlmadelClient } from "./http.ts";
 import type { AlmadelConfig } from "./config.ts";
 import type { AlmadelState } from "./state.ts";
 import type { Job } from "./types.ts";
-import { prepareTicketWorktree, returnToRepoRoot, GitError } from "./git.ts";
+import {
+  prepareTicketWorktree,
+  returnToRepoRoot,
+  commitStage,
+  pushBranch,
+  GitError,
+} from "./git.ts";
 import type { GitRunner } from "./git.ts";
 
 export interface JobContext {
@@ -112,6 +118,8 @@ async function handleTask(
       branch: job.branch,
       defaultBranch: ctx.config.defaultBranch,
       ticket: job.ticket,
+      remote: ctx.config.gitRemote,
+      expectedSha: job.base_sha,
     });
   } catch (err) {
     if (err instanceof GitError) {
@@ -125,6 +133,7 @@ async function handleTask(
   // Each ticket runs in its own worktree on its own branch. Re-anchor the
   // process cwd so the agent's shell commands operate on the isolated checkout.
   ctx.state.currentWorktree = worktree;
+  ctx.state.currentBranch = job.branch;
   try {
     process.chdir(worktree);
   } catch (err) {
@@ -161,6 +170,18 @@ async function failTicket(
   } catch (err) {
     ctx.log(`fail comment failed: ${String(err)}`);
   }
+  // Checkpoint any stranded work before re-anchoring, so a failed stage does
+  // not exist only on this one disk.
+  await checkpointStage({
+    git: ctx.git,
+    worktree: ctx.state.currentWorktree,
+    ticket: ctx.state.currentTicket,
+    branch: ctx.state.currentBranch,
+    column: "failed",
+    label: ctx.config.label,
+    gitRemote: ctx.config.gitRemote,
+    log: ctx.log,
+  });
   // Return the process to the primary checkout and clear the worktree anchor.
   try {
     await returnToRepoRoot(ctx.git, ctx.config.repoRoot);
@@ -168,8 +189,40 @@ async function failTicket(
     ctx.log(`re-anchor to repo root failed: ${String(err)}`);
   }
   ctx.state.currentWorktree = null;
+  ctx.state.currentBranch = null;
   ctx.state.currentTicket = null;
   ctx.state.status = "idle";
+}
+
+/**
+ * Safety-net commit: persists a dirty worktree without moving the ticket. Used
+ * on idle, cancel, and fail — anywhere a stage can end without `almadel_move`.
+ * Swallows errors (checkpointing is best-effort; the real commit happens on move).
+ */
+export async function checkpointStage(args: {
+  git: GitRunner;
+  worktree: string | null;
+  ticket: string | null;
+  branch: string | null;
+  column: string;
+  label: string;
+  gitRemote: string | null;
+  log: (msg: string) => void;
+}): Promise<void> {
+  if (!args.worktree || !args.ticket) return;
+  try {
+    const sha = await commitStage(args.git, {
+      worktree: args.worktree,
+      ticket: args.ticket,
+      column: args.column,
+      label: args.label,
+    });
+    if (sha && args.gitRemote) {
+      await pushBranch(args.git, args.worktree, "origin", args.branch ?? "");
+    }
+  } catch (err) {
+    args.log(`checkpoint (${args.column}) failed: ${String(err)}`);
+  }
 }
 
 function sleep(ms: number): Promise<void> {

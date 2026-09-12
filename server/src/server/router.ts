@@ -376,7 +376,7 @@ async function handleMove(db: DB, request: Request, ticketId: string, body: unkn
     if (!agent) return error(401, "invalid token")
     requireHeldTicket(db, agent, ticketId)
   }
-  const ticket = moveTicket(db, ticketId, parsed.data.column, parsed.data.note)
+  const ticket = moveTicket(db, ticketId, parsed.data.column, parsed.data.note, parsed.data.head_sha)
   return json(ticket)
 }
 

@@ -3,7 +3,7 @@ import { loadConfig, hasEnvEnlistment, resolveProjectId } from "./config.ts";
 import { AlmadelClient } from "./http.ts";
 import { createState } from "./state.ts";
 import { registerAgent } from "./register.ts";
-import { pollLoop } from "./jobs.ts";
+import { pollLoop, checkpointStage } from "./jobs.ts";
 import { realGit, returnToRepoRoot } from "./git.ts";
 import { makeAlmadelTools, type JoinArgs } from "./tools.ts";
 import { decidePermission } from "./permission.ts";
@@ -100,6 +100,8 @@ export const AlmadelPlugin: Plugin = async (input: PluginInput) => {
     state.currentTicket = null;
     state.currentSession = null;
     state.currentModel = null;
+    state.currentWorktree = null;
+    state.currentBranch = null;
     state.status = "idle";
     state.board = null;
     return `left ${state.serverUrl ?? "server"}`;
@@ -186,6 +188,17 @@ export const AlmadelPlugin: Plugin = async (input: PluginInput) => {
     if (state.currentSession) {
       await client.session.abort({ path: { id: state.currentSession } });
     }
+    // Checkpoint-commit before re-anchoring so the stage survives a requeue.
+    await checkpointStage({
+      git: realGit,
+      worktree: state.currentWorktree,
+      ticket: state.currentTicket,
+      branch: state.currentBranch,
+      column: "cancelled",
+      label: cfg.label,
+      gitRemote: cfg.gitRemote,
+      log,
+    });
     // Re-anchor to the primary checkout; the ticket worktree is kept for review.
     try {
       await returnToRepoRoot(realGit, cfg.repoRoot);
@@ -193,6 +206,7 @@ export const AlmadelPlugin: Plugin = async (input: PluginInput) => {
       log(`re-anchor on cancel failed: ${String(err)}`);
     }
     state.currentWorktree = null;
+    state.currentBranch = null;
     state.currentSession = null;
     state.currentModel = null;
     state.currentTicket = null;
@@ -231,6 +245,8 @@ export const AlmadelPlugin: Plugin = async (input: PluginInput) => {
     state,
     git: realGit,
     repoRoot: cfg.repoRoot,
+    label: cfg.label,
+    gitRemote: cfg.gitRemote,
     enlist,
     leave,
     status,
@@ -267,7 +283,23 @@ export const AlmadelPlugin: Plugin = async (input: PluginInput) => {
         pipeline?.enqueue("permission.replied", e.properties);
         return;
       }
-      if (e.type === "session.error" || e.type === "session.idle") {
+      if (e.type === "session.idle") {
+        pipeline?.enqueue(e.type, e.properties);
+        // An agent can end a stage by going quiet without ever calling
+        // almadel_move. Checkpoint a dirty worktree so work is never stranded.
+        await checkpointStage({
+          git: realGit,
+          worktree: state.currentWorktree,
+          ticket: state.currentTicket,
+          branch: state.currentBranch,
+          column: "idle",
+          label: cfg.label,
+          gitRemote: cfg.gitRemote,
+          log,
+        });
+        return;
+      }
+      if (e.type === "session.error") {
         pipeline?.enqueue(e.type, e.properties);
         return;
       }
