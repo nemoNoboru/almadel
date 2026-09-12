@@ -123,6 +123,30 @@ describe("claim", () => {
     expect(claimNow(db, "almadel-api", agent.agent_id)).toBeNull()
   })
 
+  test("a non-idle agent with no held ticket does not claim a new task", () => {
+    const db = testDb()
+    const agent = registerAgent(db, {
+      project: "almadel-api",
+      repo_root: "/srv/slots/1",
+      label: "laptop",
+      opencode_version: "1.5.0",
+      capabilities: { tools: true, permission_hook: true },
+    }, { minOpencodeVersion: "1.0.0", portBase: 8000, portBandWidth: 100 })
+
+    // After a move the agent holds no ticket, but its session is still
+    // committing, so the slot reports "working" until it flips back to idle.
+    db.query("UPDATE agents SET status = 'working', ticket_id = NULL WHERE id = ?").run(agent.agent_id)
+    createTicket(db, { project_id: "almadel-api", title: "next", column_id: "col-implement" })
+
+    expect(claimNow(db, "almadel-api", agent.agent_id)).toBeNull()
+
+    // Once the session ends the slot is idle and can claim again.
+    db.query("UPDATE agents SET status = 'idle', ticket_id = NULL WHERE id = ?").run(agent.agent_id)
+    const claimed = claimNow(db, "almadel-api", agent.agent_id)
+    expect(claimed).not.toBeNull()
+    expect(claimed!.state).toBe("running")
+  })
+
   test("a human-gate column is never claimed", () => {
     const db = testDb()
     const agent = registerAgent(db, {

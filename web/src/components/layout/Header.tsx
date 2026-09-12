@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useTheme } from "next-themes"
-import { MoonIcon, SunIcon, FlameIcon, PlusIcon } from "lucide-react"
+import { MoonIcon, SunIcon, FlameIcon, PlusIcon, PanelLeftIcon, PanelRightIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -17,7 +17,8 @@ import { isMock } from "@/api"
 import { NewProjectDialog } from "@/components/layout/NewProjectDialog"
 
 export function Header() {
-  const { projects, selectedProjectId, roster, selectProject } = useApp()
+  const { projects, selectedProjectId, roster, selectProject, rosterCollapsed, chatCollapsed, toggleRoster, toggleChat } =
+    useApp()
   const navigate = useNavigate()
   const { resolvedTheme, setTheme } = useTheme()
   const [newProjectOpen, setNewProjectOpen] = useState(false)
@@ -74,6 +75,26 @@ export function Header() {
           {needsYou} needs you
         </Badge>
       )}
+
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label="Toggle roster"
+        aria-pressed={!rosterCollapsed}
+        onClick={toggleRoster}
+      >
+        <PanelLeftIcon data-icon="inline-start" />
+      </Button>
+
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label="Toggle chat"
+        aria-pressed={!chatCollapsed}
+        onClick={toggleChat}
+      >
+        <PanelRightIcon data-icon="inline-start" />
+      </Button>
 
       <Button
         variant="ghost"

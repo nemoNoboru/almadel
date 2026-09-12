@@ -13,6 +13,7 @@ describe("JobSchema", () => {
       prompt: "do it",
       branch: "run/t1",
       model: "anthropic/claude-opus-4-1",
+      base_sha: null,
     };
     const parsed = JobSchema.parse(job);
     expect(parsed.type).toBe("task");
@@ -27,6 +28,7 @@ describe("JobSchema", () => {
       prompt: "do it",
       branch: "run/t",
       model: null,
+      base_sha: "deadbeef",
     });
     expect(job.type === "task" && job.model).toBeNull();
   });

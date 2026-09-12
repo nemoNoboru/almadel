@@ -60,6 +60,7 @@ export const TicketSchema = z.object({
   state: TicketState,
   agent_id: z.string().nullable(),
   branch: z.string().nullable(),
+  head_sha: z.string().nullable(),
   claimed_at: z.string().nullable(),
   created_at: z.string(),
 });
@@ -138,6 +139,7 @@ export const TaskJobSchema = z.object({
   prompt: z.string(),
   branch: z.string(),
   model: z.string().nullable(),
+  base_sha: z.string().nullable(),
 });
 
 export const ReplyJobSchema = z.object({
@@ -180,6 +182,7 @@ export type Job = z.infer<typeof JobSchema>;
 export const moveTicketSchema = z.object({
   column: z.string().min(1),
   note: z.string().max(2000).optional(),
+  head_sha: z.string().nullable().optional(),
 });
 export type MoveTicketInput = z.infer<typeof moveTicketSchema>;
 

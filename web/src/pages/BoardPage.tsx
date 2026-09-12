@@ -10,7 +10,7 @@ import { useApp } from "@/state/AppProvider"
 export function BoardPage() {
   const { projectId } = useParams()
   const navigate = useNavigate()
-  const { projects, selectedProjectId, selectedAgentId, selectProject } = useApp()
+  const { projects, selectedProjectId, selectedAgentId, rosterCollapsed, chatCollapsed, selectProject } = useApp()
 
   // Keep the URL and the selected project in sync.
   useEffect(() => {
@@ -32,9 +32,9 @@ export function BoardPage() {
     <div className="flex h-dvh flex-col bg-background">
       <Header />
       <div className="flex min-h-0 flex-1">
-        <Roster />
+        {!rosterCollapsed && <Roster />}
         <Board />
-        {selectedAgentId ? <AgentChatPanel /> : <ConversationPanel />}
+        {!chatCollapsed && (selectedAgentId ? <AgentChatPanel /> : <ConversationPanel />)}
       </div>
     </div>
   )

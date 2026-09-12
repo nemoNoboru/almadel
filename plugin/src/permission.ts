@@ -11,6 +11,15 @@ const READ_ONLY_PERMISSIONS = new Set([
 ]);
 
 /**
+ * Destructive git subcommands that must never reach a human for approval — a
+ * rubber-stamp of `git reset --hard` can destroy a stage. `req.permission`
+ * carries the raw command string for bash permissions (no `tool` field), which
+ * is exactly what the tool/command ternary below distinguishes. Guardrail, not
+ * a sandbox: shell quoting defeats a regex, but it stops the common accident.
+ */
+const FORBIDDEN_GIT = /\bgit\s+(checkout|switch|reset|rebase|stash|worktree)\b/;
+
+/**
  * Decides a permission request.
  *
  * 1. read-only -> allow (never escalates)
@@ -25,6 +34,12 @@ export async function decidePermission(
   state: AlmadelState,
   req: PermissionRequest,
 ): Promise<{ response: "once" | "always" | "reject" }> {
+  // Hard-deny tier above the read-only check: destructive git commands are
+  // never forwarded to a human for approval.
+  if (!req.tool && FORBIDDEN_GIT.test(req.permission)) {
+    return { response: "reject" };
+  }
+
   if (READ_ONLY_PERMISSIONS.has(req.permission)) {
     return { response: "always" };
   }

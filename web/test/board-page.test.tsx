@@ -18,4 +18,24 @@ describe("BoardPage", () => {
     renderWithApp(<BoardPage />, makeState(), ["/p/almadel-api"])
     expect(screen.getByText("1 needs you")).toBeInTheDocument()
   })
+
+  test("hides the roster when collapsed", () => {
+    renderWithApp(<BoardPage />, makeState({ rosterCollapsed: true }), ["/p/almadel-api"])
+    expect(screen.queryByText("Needs you")).toBeNull()
+    expect(screen.getByText("Spec")).toBeInTheDocument()
+    expect(screen.getByText("No conversation open")).toBeInTheDocument()
+  })
+
+  test("hides the chat panel when collapsed", () => {
+    renderWithApp(<BoardPage />, makeState({ chatCollapsed: true }), ["/p/almadel-api"])
+    expect(screen.getByText("Needs you")).toBeInTheDocument()
+    expect(screen.getByText("Spec")).toBeInTheDocument()
+    expect(screen.queryByText("No conversation open")).toBeNull()
+  })
+
+  test("shows both panes by default", () => {
+    renderWithApp(<BoardPage />, makeState(), ["/p/almadel-api"])
+    expect(screen.getByText("Needs you")).toBeInTheDocument()
+    expect(screen.getByText("No conversation open")).toBeInTheDocument()
+  })
 })

@@ -93,6 +93,7 @@ export function mapTicket(row: Record<string, unknown>): Ticket {
     column_id: row.column_id as string,
     state: row.state as TicketState,
     branch: (row.branch as string | null) ?? null,
+    head_sha: (row.head_sha as string | null) ?? null,
     agent_id: (row.agent_id as string | null) ?? null,
     priority: (row.priority as number) ?? 0,
     claimed_at: (row.claimed_at as number | null) ?? null,
@@ -178,6 +179,7 @@ export function moveTicket(
   ticketId: string,
   columnId: string,
   note?: string,
+  headSha?: string | null,
 ): Ticket {
   const ticket = getTicket(db, ticketId)
   if (!ticket) throw new HttpError(404, "ticket not found")
@@ -201,8 +203,8 @@ export function moveTicket(
   const state = targetStateFor(column)
 
   db.query(
-    "UPDATE tickets SET column_id = ?, state = ?, agent_id = NULL, claimed_at = NULL WHERE id = ?",
-  ).run(columnId, state, ticketId)
+    "UPDATE tickets SET column_id = ?, state = ?, head_sha = COALESCE(?, head_sha), agent_id = NULL, claimed_at = NULL WHERE id = ?",
+  ).run(columnId, state, headSha ?? null, ticketId)
 
   if (ticket.agent_id) releaseAgent(db, ticket.agent_id)
 

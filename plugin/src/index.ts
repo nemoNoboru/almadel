@@ -3,7 +3,7 @@ import { loadConfig, hasEnvEnlistment, resolveProjectId } from "./config.ts";
 import { AlmadelClient } from "./http.ts";
 import { createState } from "./state.ts";
 import { registerAgent } from "./register.ts";
-import { pollLoop } from "./jobs.ts";
+import { pollLoop, checkpointStage } from "./jobs.ts";
 import { realGit, returnToRepoRoot } from "./git.ts";
 import { makeAlmadelTools, type JoinArgs } from "./tools.ts";
 import { decidePermission } from "./permission.ts";
@@ -52,6 +52,10 @@ export const AlmadelPlugin: Plugin = async (input: PluginInput) => {
   const directory = input.directory;
   const cfg = loadConfig(directory);
 
+  function logVerbose(msg: string) {
+    if (cfg.verbose) log(msg);
+  }
+
   const state = createState();
   const http = new AlmadelClient(cfg.serverUrl);
   let pipeline: EventPipeline | null = null;
@@ -96,6 +100,8 @@ export const AlmadelPlugin: Plugin = async (input: PluginInput) => {
     state.currentTicket = null;
     state.currentSession = null;
     state.currentModel = null;
+    state.currentWorktree = null;
+    state.currentBranch = null;
     state.status = "idle";
     state.board = null;
     return `left ${state.serverUrl ?? "server"}`;
@@ -136,7 +142,7 @@ export const AlmadelPlugin: Plugin = async (input: PluginInput) => {
         model: parseModel(model),
       },
     });
-    log(`dispatched ${ticket} on branch ${branch} -> session ${sessionId}`);
+    logVerbose(`dispatched ${ticket} on branch ${branch} -> session ${sessionId}`);
   }
 
   async function onReply(ticket: string, text: string) {
@@ -182,6 +188,17 @@ export const AlmadelPlugin: Plugin = async (input: PluginInput) => {
     if (state.currentSession) {
       await client.session.abort({ path: { id: state.currentSession } });
     }
+    // Checkpoint-commit before re-anchoring so the stage survives a requeue.
+    await checkpointStage({
+      git: realGit,
+      worktree: state.currentWorktree,
+      ticket: state.currentTicket,
+      branch: state.currentBranch,
+      column: "cancelled",
+      label: cfg.label,
+      gitRemote: cfg.gitRemote,
+      log,
+    });
     // Re-anchor to the primary checkout; the ticket worktree is kept for review.
     try {
       await returnToRepoRoot(realGit, cfg.repoRoot);
@@ -189,10 +206,28 @@ export const AlmadelPlugin: Plugin = async (input: PluginInput) => {
       log(`re-anchor on cancel failed: ${String(err)}`);
     }
     state.currentWorktree = null;
+    state.currentBranch = null;
     state.currentSession = null;
     state.currentModel = null;
     state.currentTicket = null;
     state.status = "idle";
+    state.pendingRecycle = false;
+  }
+
+  // Recycle the slot once the current session has actually ended (idle/error).
+  // Called from the event hook; keeps the claim loop from grabbing the next task
+  // while this session is still committing.
+  async function recycleSlot() {
+    try {
+      await returnToRepoRoot(realGit, cfg.repoRoot);
+    } catch (err) {
+      log(`re-anchor on recycle failed: ${String(err)}`);
+    }
+    state.currentSession = null;
+    state.currentTicket = null;
+    state.currentWorktree = null;
+    state.status = "idle";
+    state.pendingRecycle = false;
   }
 
   function startPolling() {
@@ -204,6 +239,7 @@ export const AlmadelPlugin: Plugin = async (input: PluginInput) => {
       state,
       git: realGit,
       log,
+      logVerbose,
       dispatchPrompt,
       onReply,
       onCancel,
@@ -226,6 +262,8 @@ export const AlmadelPlugin: Plugin = async (input: PluginInput) => {
     state,
     git: realGit,
     repoRoot: cfg.repoRoot,
+    label: cfg.label,
+    gitRemote: cfg.gitRemote,
     enlist,
     leave,
     status,
@@ -262,7 +300,30 @@ export const AlmadelPlugin: Plugin = async (input: PluginInput) => {
         pipeline?.enqueue("permission.replied", e.properties);
         return;
       }
-      if (e.type === "session.error" || e.type === "session.idle") {
+      if (e.type === "session.idle") {
+        if (state.pendingRecycle) {
+          await recycleSlot();
+        } else {
+          // An agent can end a stage by going quiet without ever calling
+          // almadel_move. Checkpoint a dirty worktree so work is never stranded.
+          await checkpointStage({
+            git: realGit,
+            worktree: state.currentWorktree,
+            ticket: state.currentTicket,
+            branch: state.currentBranch,
+            column: "idle",
+            label: cfg.label,
+            gitRemote: cfg.gitRemote,
+            log,
+          });
+        }
+        pipeline?.enqueue(e.type, e.properties);
+        return;
+      }
+      if (e.type === "session.error") {
+        if (state.pendingRecycle) {
+          await recycleSlot();
+        }
         pipeline?.enqueue(e.type, e.properties);
         return;
       }

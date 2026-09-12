@@ -46,4 +46,30 @@ describe("Header", () => {
       expect(document.documentElement.classList.contains("light")).toBe(true),
     )
   })
+
+  test("renders roster and chat toggle buttons", () => {
+    renderWithApp(<Header />)
+    expect(screen.getByRole("button", { name: /toggle roster/i })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /toggle chat/i })).toBeInTheDocument()
+  })
+
+  test("clicking the toggles calls the collapse callbacks", () => {
+    let rosterToggled = false
+    let chatToggled = false
+    renderWithApp(
+      <Header />,
+      makeState({
+        toggleRoster: () => {
+          rosterToggled = true
+        },
+        toggleChat: () => {
+          chatToggled = true
+        },
+      }),
+    )
+    fireEvent.click(screen.getByRole("button", { name: /toggle roster/i }))
+    fireEvent.click(screen.getByRole("button", { name: /toggle chat/i }))
+    expect(rosterToggled).toBe(true)
+    expect(chatToggled).toBe(true)
+  })
 })

@@ -27,11 +27,13 @@ export interface AlmadelState {
   currentSession: string | null;
   currentModel: string | null;
   currentWorktree: string | null;
+  currentBranch: string | null;
   status: AgentStatus;
   board: Board | null;
   pendingPermissions: Map<string, PendingPermission>;
   pendingQuestions: Map<string, PendingQuestion>;
   running: boolean;
+  pendingRecycle: boolean;
 }
 
 export function createState(): AlmadelState {
@@ -44,10 +46,12 @@ export function createState(): AlmadelState {
     currentSession: null,
     currentModel: null,
     currentWorktree: null,
+    currentBranch: null,
     status: "idle",
     board: null,
     pendingPermissions: new Map(),
     pendingQuestions: new Map(),
     running: false,
+    pendingRecycle: false,
   };
 }
