@@ -1,0 +1,120 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF_NAME" == v* ]]; then
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            VERSION="$(bun -e 'console.log(JSON.parse(require("node:fs").readFileSync("server/package.json", "utf8")).version)')"
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          fi
+
+      # 1. Build the web app (plan §13, step 1).
+      - name: Build web UI
+        working-directory: web
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+
+      # 2. Bundle the UI into the server (plan §13, step 2).
+      - name: Bundle UI into server
+        working-directory: server
+        run: |
+          bun install --frozen-lockfile
+          bun run build:ui
+
+      # 3. Compile the CLI (plan §13, step 3).
+      - name: Compile CLI
+        working-directory: server
+        run: bun run build:cli
+
+      # Plugin bundle — the same artifact e2e/run.sh drops into .opencode/plugins/.
+      - name: Bundle plugin
+        working-directory: plugin
+        run: |
+          bun install --frozen-lockfile
+          bun build src/index.ts --target bun --outdir dist
+
+      # Assemble a flattened server package (package.json at the repo root) so a
+      # `bun add -g <git-url>#release` git-install resolves it — bun's git
+      # installs do not support subdirectory targets.
+      - name: Assemble release package
+        id: assemble
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          STAGE="$RUNNER_TEMP/stage"
+          OUT="$RUNNER_TEMP/out"
+          rm -rf "$STAGE" "$OUT"
+          mkdir -p "$STAGE" "$OUT"
+
+          cp server/package.json "$STAGE/package.json"
+          cp -r server/dist "$STAGE/dist"
+          cp -r server/ui "$STAGE/ui"
+          cp LICENSE "$STAGE/LICENSE"
+          cp server/README.md "$STAGE/README.md"
+
+          bun -e '
+            const fs = require("node:fs");
+            const path = process.env.STAGE + "/package.json";
+            const p = JSON.parse(fs.readFileSync(path, "utf8"));
+            p.version = process.env.VERSION;
+            p.bin = { almadel: "dist/cli.js" };
+            p.files = ["dist", "ui"];
+            fs.writeFileSync(path, JSON.stringify(p, null, 2) + "\n");
+          '
+
+          tar -czf "$OUT/almadel-${VERSION}.tgz" -C "$STAGE" .
+          cp plugin/dist/index.js "$OUT/almadel-plugin-${VERSION}.js"
+
+          echo "stage=$STAGE" >> "$GITHUB_OUTPUT"
+          echo "out=$OUT" >> "$GITHUB_OUTPUT"
+
+      # Keep `release` as the git-install target: a flattened, buildable server
+      # package at the root of the branch (see plan §13 git-install decision).
+      - name: Publish release branch
+        env:
+          STAGE: ${{ steps.assemble.outputs.stage }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan release
+          git rm -rf --quiet . || true
+          cp -a "$STAGE"/. .
+          git add -A
+          git commit -m "release ${VERSION}"
+          git push -f origin release
+
+      - name: Stage release assets
+        run: cp -a "${{ steps.assemble.outputs.out }}"/. "$GITHUB_WORKSPACE/"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            almadel-*.tgz
+            almadel-plugin-*.js
