@@ -193,43 +193,6 @@ export function newId(prefix: string): string {
   return `${prefix}_${crypto.randomUUID().replaceAll("-", "").slice(0, 20)}`
 }
 
-const ANGELS = [
-  "Alimiel",
-  "Gabriel",
-  "Barachiel",
-  "Gediel",
-  "Raphael",
-  "Michael",
-  "Uriel",
-  "Raguel",
-  "Sariel",
-  "Remiel",
-  "Anael",
-  "Cassiel",
-  "Sachiel",
-  "Zadkiel",
-  "Haniel",
-  "Jophiel",
-  "Chamuel",
-  "Azrael",
-  "Metatron",
-  "Sandalphon",
-]
-
-export function nextAngelName(db: Database, projectId: string): string {
-  const used = new Set(
-    (
-      db.query("SELECT name FROM agents WHERE project_id = ?").all(projectId) as {
-        name: string | null
-      }[]
-    )
-      .map((r) => r.name)
-      .filter((n): n is string => n != null),
-  )
-  for (const name of ANGELS) if (!used.has(name)) return name
-  return `${ANGELS[0]}${used.size + 1}`
-}
-
 export function nextTicketId(db: Database): string {
   const run = db.transaction(() => {
     const row = db.query("SELECT value FROM meta WHERE key = 'ticket_seq'").get() as

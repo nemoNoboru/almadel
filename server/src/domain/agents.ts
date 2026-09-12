@@ -1,5 +1,5 @@
 import { broadcastRoster } from "../notify"
-import { newId, nextAngelName, now } from "../db"
+import { newId, now } from "../db"
 import type { DB } from "../db"
 import { HttpError } from "../http-error"
 import type { Agent, AgentStatus } from "../types"
@@ -111,7 +111,7 @@ export function registerAgent(
     }
 
     const id = newId("agt")
-    const name = nextAngelName(db, input.project)
+    const name = label
     const portBase = allocatePortBand(db, input.project, config.portBase, config.portBandWidth)
 
     db.query(
