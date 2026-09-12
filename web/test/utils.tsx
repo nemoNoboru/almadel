@@ -196,6 +196,7 @@ export function makeState(overrides: Partial<AppState> = {}): AppState {
     createTicket: async () => {},
     reply: async () => {},
     updateComment: async () => {},
+    updateTicket: async () => {},
     decidePermission: async () => {},
     cancel: async () => {},
     takeover: async () => {},

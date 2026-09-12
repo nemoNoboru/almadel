@@ -16,6 +16,11 @@ export interface CreateTicketInput {
   column_id: string
 }
 
+export interface UpdateTicketInput {
+  title: string
+  body?: string
+}
+
 export interface ColumnInput {
   name: string
   prompt: string | null
@@ -76,6 +81,7 @@ export interface AlmadelClient {
   moveTicket(ticketId: string, input: MoveTicketInput): Promise<void>
   reply(ticketId: string, body: string): Promise<void>
   updateComment(ticketId: string, commentId: number, body: string): Promise<void>
+  updateTicket(ticketId: string, input: UpdateTicketInput): Promise<void>
   decidePermission(
     ticketId: string,
     decision: PermissionDecision,

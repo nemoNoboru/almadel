@@ -7,7 +7,7 @@ import { askQuestion, decidePermission, reply, requestPermission } from "../src/
 import { claimNow, makeTaskJob } from "../src/domain/claim"
 import { sweep } from "../src/domain/lease"
 import { roster, thread } from "../src/domain/roster"
-import { board, cancelTicket, createProject, createTicket, getTicket, moveTicket } from "../src/domain/tickets"
+import { board, cancelTicket, createProject, createTicket, getTicket, moveTicket, updateTicket } from "../src/domain/tickets"
 
 function testDb(): Database {
   const db = new Database(":memory:")
@@ -295,6 +295,22 @@ describe("move", () => {
     db.query("UPDATE tickets SET state = 'running' WHERE id IN (?, ?)").run(t1.id, t2.id)
 
     expect(() => moveTicket(db, t3.id, "col-implement")).toThrow()
+  })
+})
+
+describe("updateTicket", () => {
+  test("persists title and body", () => {
+    const db = testDb()
+    const t = createTicket(db, { project_id: "almadel-api", title: "old", body: "body", column_id: "col-spec" })
+    const updated = updateTicket(db, t.id, { title: "new", body: "new body" })
+    expect(updated.title).toBe("new")
+    expect(updated.body).toBe("new body")
+    expect(getTicket(db, t.id)!.title).toBe("new")
+  })
+
+  test("404s for an unknown ticket", () => {
+    const db = testDb()
+    expect(() => updateTicket(db, "nope", { title: "x" })).toThrow()
   })
 })
 

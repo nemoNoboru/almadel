@@ -59,4 +59,22 @@ describe("TicketCard", () => {
     fireEvent.keyDown(screen.getByRole("button"), { key: "Enter" })
     expect(onSelect).toHaveBeenCalled()
   })
+
+  test("pencil button fires onEdit without selecting", () => {
+    const onSelect = vi.fn()
+    const onEdit = vi.fn()
+    renderWithApp(
+      <TicketCard
+        ticket={makeTicket({ id: "TCK-9", title: "Fix the thing" })}
+        selected={false}
+        onSelect={onSelect}
+        onDragStart={vi.fn()}
+        onDragEnd={vi.fn()}
+        onEdit={onEdit}
+      />,
+    )
+    fireEvent.click(screen.getByRole("button", { name: /edit fix the thing/i }))
+    expect(onEdit).toHaveBeenCalled()
+    expect(onSelect).not.toHaveBeenCalled()
+  })
 })

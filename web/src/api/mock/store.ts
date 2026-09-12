@@ -169,6 +169,13 @@ class Store {
     this.tickets.push(ticket)
   }
 
+  updateTicket(ticketId: string, title: string, body?: string): void {
+    const ticket = this.tickets.find((t) => t.id === ticketId)
+    if (!ticket) throw new Error(`ticket not found: ${ticketId}`)
+    ticket.title = title
+    ticket.body = body ?? null
+  }
+
   moveTicket(ticketId: string, columnId: string, note?: string): void {
     const ticket = this.tickets.find((t) => t.id === ticketId)
     if (!ticket) throw new Error(`ticket not found: ${ticketId}`)

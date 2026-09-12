@@ -439,6 +439,42 @@ describe("comment editing", () => {
   })
 })
 
+describe("ticket editing", () => {
+  test("PATCH /api/tickets/{id} updates title and body", async () => {
+    const db = testDb()
+    const t = createTicket(db, { project_id: "almadel-api", title: "old", column_id: "col-implement" })
+
+    const res = await api(db, config, "PATCH", `/api/tickets/${t.id}`, {
+      body: { title: "new", body: "updated body" },
+    })
+    expect(res!.status).toBe(200)
+    const updated = await res!.json()
+    expect(updated.title).toBe("new")
+    expect(updated.body).toBe("updated body")
+
+    const got = getTicket(db, t.id)!
+    expect(got.title).toBe("new")
+    expect(got.body).toBe("updated body")
+  })
+
+  test("PATCH 400s on empty or missing title", async () => {
+    const db = testDb()
+    const t = createTicket(db, { project_id: "almadel-api", title: "x", column_id: "col-implement" })
+
+    const empty = await api(db, config, "PATCH", `/api/tickets/${t.id}`, { body: { title: "" } })
+    expect(empty!.status).toBe(400)
+
+    const missing = await api(db, config, "PATCH", `/api/tickets/${t.id}`, { body: {} })
+    expect(missing!.status).toBe(400)
+  })
+
+  test("PATCH 404s for unknown ticket", async () => {
+    const db = testDb()
+    const res = await api(db, config, "PATCH", "/api/tickets/nope", { body: { title: "x" } })
+    expect(res!.status).toBe(404)
+  })
+})
+
 describe("agent auth", () => {
   test("GET thread with a foreign bearer 403s", async () => {
     const db = testDb()

@@ -42,6 +42,7 @@ export function Board() {
   const [draggingTicketId, setDraggingTicketId] = useState<string | null>(null)
   const [pendingMove, setPendingMove] = useState<PendingMove | null>(null)
   const [newTicketColumn, setNewTicketColumn] = useState<ColumnType | null>(null)
+  const [editingTicketId, setEditingTicketId] = useState<string | null>(null)
   const [editing, setEditing] = useState<ColumnType | "pipeline" | null>(null)
 
   const agentNames = useMemo(() => {
@@ -69,6 +70,8 @@ export function Board() {
     for (const t of board?.tickets ?? []) map.set(t.id, t)
     return map
   }, [board])
+
+  const editingTicket = editingTicketId ? (ticketById.get(editingTicketId) ?? null) : null
 
   const handleDragStart = (ticketId: string) => (e: React.DragEvent) => {
     e.dataTransfer.setData("text/plain", ticketId)
@@ -165,6 +168,7 @@ export function Board() {
               onDrop={handleDrop}
               onEdit={(c) => setEditing(c)}
               onNewTicket={(c) => setNewTicketColumn(c)}
+              onEditTicket={(id) => setEditingTicketId(id)}
             />
           ))}
         </div>
@@ -172,10 +176,14 @@ export function Board() {
       </ScrollArea>
 
       <NewTicketDialog
-        open={newTicketColumn != null}
+        open={newTicketColumn != null || editingTicketId != null}
         column={newTicketColumn}
+        ticket={editingTicket}
         onOpenChange={(open) => {
-          if (!open) setNewTicketColumn(null)
+          if (!open) {
+            setNewTicketColumn(null)
+            setEditingTicketId(null)
+          }
         }}
       />
 

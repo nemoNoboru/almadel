@@ -176,6 +176,18 @@ export class MockClient implements AlmadelClient {
     this.broadcastTicket(ticketId)
   }
 
+  async updateTicket(ticketId: string, input: { title: string; body?: string }) {
+    await delay()
+    const ticket = this.store.tickets.find((t) => t.id === ticketId)
+    try {
+      this.store.updateTicket(ticketId, input.title, input.body)
+    } catch (err) {
+      throw new ApiError(404, "ticket not found")
+    }
+    if (ticket) this.broadcastBoard(ticket.project_id)
+    this.broadcastTicket(ticketId)
+  }
+
   async decidePermission(
     ticketId: string,
     decision: "allow" | "deny",

@@ -1,7 +1,8 @@
 import { useMemo } from "react"
-import { BotIcon, GitBranchIcon } from "lucide-react"
+import { BotIcon, GitBranchIcon, PencilIcon } from "lucide-react"
 import { cn } from "cn"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import type { Ticket } from "@/types/domain"
 import { ticketStateLabel, isBlocked } from "@/lib/display"
 
@@ -29,6 +30,7 @@ export function TicketCard({
   onSelect,
   onDragStart,
   onDragEnd,
+  onEdit,
 }: {
   ticket: Ticket
   agentName?: string
@@ -36,6 +38,7 @@ export function TicketCard({
   onSelect: () => void
   onDragStart: (e: React.DragEvent) => void
   onDragEnd: () => void
+  onEdit?: () => void
 }) {
   const blocked = isBlocked(ticket.state)
 
@@ -62,9 +65,24 @@ export function TicketCard({
     >
       <div className="flex items-start justify-between gap-2">
         <span className="text-xs font-medium text-muted-foreground">{ticket.id}</span>
-        <Badge className={cn("px-1.5 text-[10px]", chip)}>
-          {ticketStateLabel[ticket.state]}
-        </Badge>
+        <div className="flex items-center gap-1">
+          {onEdit && (
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label={`Edit ${ticket.title}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                onEdit()
+              }}
+            >
+              <PencilIcon data-icon="inline-start" />
+            </Button>
+          )}
+          <Badge className={cn("px-1.5 text-[10px]", chip)}>
+            {ticketStateLabel[ticket.state]}
+          </Badge>
+        </div>
       </div>
 
       <p className="line-clamp-2 text-sm leading-snug font-medium">{ticket.title}</p>

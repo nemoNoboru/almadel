@@ -55,6 +55,7 @@ export interface AppState {
   }) => Promise<void>
   reply: (ticketId: string, body: string) => Promise<void>
   updateComment: (ticketId: string, commentId: number, body: string) => Promise<void>
+  updateTicket: (ticketId: string, input: { title: string; body?: string }) => Promise<void>
   decidePermission: (
     ticketId: string,
     decision: "allow" | "deny",
@@ -328,6 +329,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [refreshThread],
   )
 
+  const updateTicket = useCallback(
+    async (ticketId: string, input: { title: string; body?: string }) => {
+      await client.updateTicket(ticketId, input)
+      if (selectedProjectRef.current) refreshBoard(selectedProjectRef.current)
+      if (selectedTicketRef.current === ticketId) refreshThread(ticketId)
+    },
+    [refreshBoard, refreshThread],
+  )
+
   const decidePermission = useCallback(
     async (
       ticketId: string,
@@ -411,6 +421,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       createTicket,
       reply,
       updateComment,
+      updateTicket,
       decidePermission,
       cancel,
       takeover,
@@ -445,6 +456,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       createTicket,
       reply,
       updateComment,
+      updateTicket,
       decidePermission,
       cancel,
       takeover,

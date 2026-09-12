@@ -217,6 +217,11 @@ export const createTicketSchema = z.object({
   column_id: z.string().min(1),
 })
 
+export const updateTicketSchema = z.object({
+  title: z.string().min(1),
+  body: z.string().optional(),
+})
+
 export const moveTicketSchema = z.object({
   column: z.string().min(1),
   note: z.string().max(2000).optional(),

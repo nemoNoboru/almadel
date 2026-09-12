@@ -17,6 +17,7 @@ export function Column({
   onDrop,
   onEdit,
   onNewTicket,
+  onEditTicket,
 }: {
   column: ColumnType
   tickets: Ticket[]
@@ -29,6 +30,7 @@ export function Column({
   onDrop: (ticketId: string, columnId: string) => void
   onEdit: (column: ColumnType) => void
   onNewTicket: (column: ColumnType) => void
+  onEditTicket: (ticketId: string) => void
 }) {
   const prompted = column.prompt != null
 
@@ -114,6 +116,7 @@ export function Column({
             onSelect={() => onSelect(ticket.id)}
             onDragStart={onDragStart(ticket.id)}
             onDragEnd={onDragEnd}
+            onEdit={() => onEditTicket(ticket.id)}
           />
         ))}
 

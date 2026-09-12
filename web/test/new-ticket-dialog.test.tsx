@@ -1,8 +1,8 @@
 import { describe, expect, test, vi } from "bun:test"
 import { fireEvent, screen, waitFor } from "@testing-library/react"
-import { renderWithApp, makeState, columns, makeAgent, project } from "./utils"
+import { renderWithApp, makeState, columns, makeAgent, project, makeTicket } from "./utils"
 import { NewTicketDialog } from "@/components/board/NewTicketDialog"
-import type { Roster } from "@/types/domain"
+import type { Roster, Ticket } from "@/types/domain"
 
 function idleRoster(): Roster {
   return {
@@ -82,5 +82,36 @@ describe("NewTicketDialog — draft mode", () => {
       { timeout: 4000 },
     )
     expect(screen.getByText(/drafted by barachiel/i)).toBeInTheDocument()
+  })
+})
+
+function renderEditDialog(ticket: Ticket, state = makeState({ roster: idleRoster() })) {
+  const onOpenChange = vi.fn()
+  const utils = renderWithApp(
+    <NewTicketDialog open ticket={ticket} column={null} onOpenChange={onOpenChange} />,
+    state,
+  )
+  return { ...utils, onOpenChange }
+}
+
+describe("NewTicketDialog — edit mode", () => {
+  test("pre-fills title and body from the ticket", () => {
+    renderEditDialog(makeTicket({ id: "TCK-5", title: "Fix bug", body: "details" }))
+    expect((screen.getByLabelText(/title/i) as HTMLInputElement).value).toBe("Fix bug")
+    expect((screen.getByLabelText(/body/i) as HTMLTextAreaElement).value).toBe("details")
+    expect(screen.getByText("Edit card")).toBeInTheDocument()
+  })
+
+  test("saves changes via updateTicket", async () => {
+    const updateTicket = vi.fn()
+    renderEditDialog(
+      makeTicket({ id: "TCK-5", title: "Fix bug", body: "details" }),
+      makeState({ roster: idleRoster(), updateTicket }),
+    )
+    fireEvent.change(screen.getByLabelText(/title/i), { target: { value: "Fixed" } })
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }))
+    await waitFor(() =>
+      expect(updateTicket).toHaveBeenCalledWith("TCK-5", expect.objectContaining({ title: "Fixed" })),
+    )
   })
 })

@@ -227,6 +227,16 @@ export function moveTicket(
   return getTicket(db, ticketId)!
 }
 
+export function updateTicket(db: DB, ticketId: string, input: { title: string; body?: string }): Ticket {
+  const ticket = getTicket(db, ticketId)
+  if (!ticket) throw new HttpError(404, "ticket not found")
+
+  db.query("UPDATE tickets SET title = ?, body = ? WHERE id = ?").run(input.title, input.body ?? null, ticketId)
+  broadcastRoster()
+  broadcastTicket(ticketId, "{}")
+  return getTicket(db, ticketId)!
+}
+
 export function cancelTicket(db: DB, ticketId: string): Ticket {
   const ticket = getTicket(db, ticketId)
   if (!ticket) throw new HttpError(404, "ticket not found")

@@ -30,20 +30,23 @@ import { Separator } from "@/components/ui/separator"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useApp } from "@/state/AppProvider"
 import { client } from "@/api"
-import type { Column } from "@/types/domain"
+import type { Column, Ticket } from "@/types/domain"
 
 type Mode = "write" | "draft"
 
 export function NewTicketDialog({
   open,
   column,
+  ticket,
   onOpenChange,
 }: {
   open: boolean
   column: Column | null
+  ticket?: Ticket | null
   onOpenChange: (open: boolean) => void
 }) {
-  const { board, roster, createTicket } = useApp()
+  const { board, roster, createTicket, updateTicket } = useApp()
+  const isEdit = ticket != null
   const [mode, setMode] = useState<Mode>("write")
   const [title, setTitle] = useState("")
   const [body, setBody] = useState("")
@@ -56,13 +59,13 @@ export function NewTicketDialog({
   useEffect(() => {
     if (open) {
       setMode("write")
-      setTitle("")
-      setBody("")
+      setTitle(ticket?.title ?? "")
+      setBody(ticket?.body ?? "")
       setAgentId("")
       setInstruction("")
       setDraftedBy(null)
     }
-  }, [open])
+  }, [open, ticket])
 
   const idleAgents = useMemo(() => {
     if (!board || !roster) return []
@@ -72,9 +75,9 @@ export function NewTicketDialog({
     )
   }, [board, roster])
 
-  if (!board || !column) return null
+  if (!board || (!isEdit && !column)) return null
 
-  const prompted = column.prompt != null
+  const prompted = column != null && column.prompt != null
 
   const runDraft = async () => {
     if (!instruction.trim() || !agentId) return
@@ -101,16 +104,21 @@ export function NewTicketDialog({
     if (!title.trim()) return
     setSaving(true)
     try {
-      await createTicket({
-        project_id: board.project.id,
-        title: title.trim(),
-        body: body.trim(),
-        column_id: column.id,
-      })
-      toast.success(`Created ticket in ${column.name}`)
+      if (ticket) {
+        await updateTicket(ticket.id, { title: title.trim(), body: body.trim() })
+        toast.success("Saved")
+      } else {
+        await createTicket({
+          project_id: board.project.id,
+          title: title.trim(),
+          body: body.trim(),
+          column_id: column!.id,
+        })
+        toast.success(`Created ticket in ${column!.name}`)
+      }
       onOpenChange(false)
     } catch {
-      toast.error("Couldn't create the ticket")
+      toast.error(ticket ? "Couldn't save the ticket" : "Couldn't create the ticket")
     } finally {
       setSaving(false)
     }
@@ -120,31 +128,35 @@ export function NewTicketDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>New card in {column.name}</DialogTitle>
+          <DialogTitle>{isEdit ? "Edit card" : `New card in ${column!.name}`}</DialogTitle>
           <DialogDescription>
-            {prompted
-              ? "This column is an agent stage — the ticket dispatches as soon as it's created."
-              : "This column is a human gate — nothing auto-dispatches."}
+            {isEdit
+              ? "Update the title and body of this card."
+              : prompted
+                ? "This column is an agent stage — the ticket dispatches as soon as it's created."
+                : "This column is a human gate — nothing auto-dispatches."}
           </DialogDescription>
         </DialogHeader>
 
-        <ToggleGroup
-          type="single"
-          value={mode}
-          onValueChange={(v) => {
-            if (v) setMode(v as Mode)
-          }}
-          variant="outline"
-          size="sm"
-        >
-          <ToggleGroupItem value="write">Write yourself</ToggleGroupItem>
-          <ToggleGroupItem value="draft">
-            <WandIcon data-icon="inline-start" />
-            Ask an agent to draft
-          </ToggleGroupItem>
-        </ToggleGroup>
+        {!isEdit && (
+          <ToggleGroup
+            type="single"
+            value={mode}
+            onValueChange={(v) => {
+              if (v) setMode(v as Mode)
+            }}
+            variant="outline"
+            size="sm"
+          >
+            <ToggleGroupItem value="write">Write yourself</ToggleGroupItem>
+            <ToggleGroupItem value="draft">
+              <WandIcon data-icon="inline-start" />
+              Ask an agent to draft
+            </ToggleGroupItem>
+          </ToggleGroup>
+        )}
 
-        {mode === "draft" && (
+        {!isEdit && mode === "draft" && (
           <FieldGroup className="rounded-lg border p-3">
             <Field>
               <FieldLabel htmlFor="draft-agent">Agent (idle slot)</FieldLabel>
@@ -239,7 +251,7 @@ export function NewTicketDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={!title.trim() || saving}>
-              {prompted ? "Create and dispatch" : "Create"}
+              {isEdit ? "Save changes" : prompted ? "Create and dispatch" : "Create"}
             </Button>
           </DialogFooter>
         </form>

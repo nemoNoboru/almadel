@@ -29,6 +29,7 @@ import {
   permissionRequestSchema,
   registrationSchema,
   replySchema,
+  updateTicketSchema,
 } from "../types"
 import { deregisterAgent, getAgent, registerAgent, updateTelemetry } from "../domain/agents"
 import {
@@ -58,6 +59,7 @@ import {
   moveTicket,
   takeoverTicket,
   updateComment,
+  updateTicket,
 } from "../domain/tickets"
 import { hasBearer, resolveBearer } from "./auth"
 import { createSSE } from "./sse"
@@ -254,6 +256,11 @@ export async function handleApi(
 
       if (method === "GET" && sub === undefined) {
         return handleGetTicket(db, request, ticketId)
+      }
+      if (method === "PATCH" && sub === undefined) {
+        const parsed = updateTicketSchema.safeParse(await readJson(request))
+        if (!parsed.success) return error(400, "invalid ticket", zodIssues(parsed.error))
+        return json(updateTicket(db, ticketId, parsed.data))
       }
       if (method === "GET" && sub === "stream") {
         return handleTicketStream(db, request, ticketId, url)
