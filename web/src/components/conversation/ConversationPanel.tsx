@@ -136,7 +136,7 @@ export function ConversationPanel() {
         <div className="flex flex-col gap-3 p-3">
           {agent && !agent.online && (
             <Alert className="text-xs">
-              Agent offline — replies are disabled until it reconnects.
+              Agent offline — it won't respond until it reconnects.
             </Alert>
           )}
 
@@ -341,12 +341,11 @@ function ComposeArea({
   }
 
   const readOnly = state === "ready" || state === "done" || state === "failed"
+  const commentOnly = readOnly || !agentOnline
 
   return (
     <div className="flex flex-col gap-2 border-t p-3">
-      {!agentOnline ? (
-        <p className="text-center text-xs text-muted-foreground">Agent offline</p>
-      ) : state === "blocked_permission" ? (
+      {state === "blocked_permission" && agentOnline ? (
         <PermissionControls
           command={thread.permission?.command ?? null}
           scope={scope}
@@ -354,7 +353,7 @@ function ComposeArea({
           onAllow={() => decide("allow")}
           onDeny={() => decide("deny")}
         />
-      ) : state === "blocked_question" ? (
+      ) : state === "blocked_question" && agentOnline ? (
         <div className="flex flex-col gap-2">
           <Textarea
             value={body}
@@ -376,16 +375,12 @@ function ComposeArea({
             </Button>
           </div>
         </div>
-      ) : readOnly ? (
-        <p className="text-center text-xs text-muted-foreground">
-          Read-only — no live agent on this ticket.
-        </p>
       ) : (
         <div className="flex flex-col gap-2">
           <Textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
-            placeholder="Message the agent…"
+            placeholder={commentOnly ? "Add a comment…" : "Message the agent…"}
             rows={3}
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) send()
@@ -393,10 +388,12 @@ function ComposeArea({
           />
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground">
-              Agent is working — this is queued until the turn ends.
+              {commentOnly
+                ? "No live agent — this comment stays on the ticket."
+                : "Agent is working — this is queued until the turn ends."}
             </span>
             <Button onClick={send} disabled={!body.trim()}>
-              Queue
+              {commentOnly ? "Comment" : "Queue"}
               <SendIcon data-icon="inline-end" />
             </Button>
           </div>

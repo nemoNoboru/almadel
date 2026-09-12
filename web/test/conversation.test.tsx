@@ -83,18 +83,42 @@ describe("ConversationPanel — compose by state", () => {
     expect(screen.getByRole("button", { name: /queue/i })).toBeInTheDocument()
   })
 
-  test("done shows read-only", () => {
+  test("done shows a comment box", () => {
     const thread = makeThread({
       ticket: { ...makeThread().ticket, state: "done", agent_id: null },
       question: null,
       comments: [],
     })
     renderWithApp(<ConversationPanel />, makeState({ selectedTicketId: "TCK-3", thread }))
-    expect(screen.queryByRole("textbox")).toBeNull()
+    expect(screen.getByPlaceholderText(/add a comment/i)).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /comment/i })).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: /cancel/i })).toBeNull()
+    expect(screen.queryByRole("button", { name: /take over/i })).toBeNull()
   })
 
-  test("offline agent disables replies", () => {
+  test("ready shows a comment box", () => {
+    const thread = makeThread({
+      ticket: { ...makeThread().ticket, state: "ready", agent_id: null },
+      question: null,
+      comments: [],
+    })
+    renderWithApp(<ConversationPanel />, makeState({ selectedTicketId: "TCK-3", thread }))
+    expect(screen.getByPlaceholderText(/add a comment/i)).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /comment/i })).toBeInTheDocument()
+  })
+
+  test("failed shows a comment box", () => {
+    const thread = makeThread({
+      ticket: { ...makeThread().ticket, state: "failed", agent_id: null },
+      question: null,
+      comments: [],
+    })
+    renderWithApp(<ConversationPanel />, makeState({ selectedTicketId: "TCK-3", thread }))
+    expect(screen.getByPlaceholderText(/add a comment/i)).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /comment/i })).toBeInTheDocument()
+  })
+
+  test("offline agent still shows a comment box", () => {
     const offlineRoster: RosterType = {
       projects: [{ project, agents: [makeAgent({ id: "agt-off", name: "Ghost", online: false })] }],
       needs_you: 0,
@@ -106,8 +130,9 @@ describe("ConversationPanel — compose by state", () => {
       <ConversationPanel />,
       makeState({ selectedTicketId: "TCK-3", thread, roster: offlineRoster }),
     )
-    expect(screen.getByText(/replies are disabled/i)).toBeInTheDocument()
-    expect(screen.queryByRole("textbox")).toBeNull()
+    expect(screen.getByText(/won't respond until it reconnects/i)).toBeInTheDocument()
+    expect(screen.getByPlaceholderText(/add a comment/i)).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /^comment$/i })).toBeInTheDocument()
   })
 })
 
@@ -150,6 +175,24 @@ describe("ConversationPanel — actions", () => {
     })
     fireEvent.click(screen.getByRole("button", { name: /reply/i }))
     await waitFor(() => expect(reply).toHaveBeenCalledWith("TCK-3", "Use JWT"))
+  })
+
+  test("commenting on a done ticket posts via reply", async () => {
+    const reply = vi.fn()
+    const thread = makeThread({
+      ticket: { ...makeThread().ticket, state: "done", agent_id: null },
+      question: null,
+      comments: [],
+    })
+    renderWithApp(
+      <ConversationPanel />,
+      makeState({ selectedTicketId: "TCK-3", thread, reply }),
+    )
+    fireEvent.change(screen.getByPlaceholderText(/add a comment/i), {
+      target: { value: "Looks good" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: /comment/i }))
+    await waitFor(() => expect(reply).toHaveBeenCalledWith("TCK-3", "Looks good"))
   })
 })
 
