@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useApp } from "@/state/AppProvider"
 import type { Message } from "@/api/client"
 import { relativeTime, agentStatusLabel } from "@/lib/display"
+import { Markdown } from "@/components/Markdown"
 
 export function AgentChatPanel() {
   const {
@@ -130,7 +131,7 @@ function MessageRow({ message }: { message: Message }) {
           mine ? "bg-primary text-primary-foreground" : "bg-muted",
         )}
       >
-        <p className="whitespace-pre-wrap">{message.body}</p>
+        <Markdown>{message.body}</Markdown>
       </div>
       <span className="flex items-center gap-1 text-xs text-muted-foreground">
         {mine ? <UserIcon className="size-3" /> : <BotIcon className="size-3" />}
