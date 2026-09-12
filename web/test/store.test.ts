@@ -186,6 +186,17 @@ describe("Store.updateColumns", () => {
     expect(apiCols.map((c) => c.name)).toEqual(["A", "B"])
     expect(store.columns.filter((c) => c.project_id === "almadel-web").length).toBe(before)
   })
+
+  test("round-trips the model field, defaulting to null", () => {
+    const store = fresh()
+    store.updateColumns("almadel-api", [
+      { id: "col-a", name: "A", model: "anthropic/claude-opus-4-1" },
+      { id: "col-b", name: "B" },
+    ] as never[])
+    const cols = store.columns.filter((c) => c.project_id === "almadel-api")
+    expect(cols[0].model).toBe("anthropic/claude-opus-4-1")
+    expect(cols[1].model).toBeNull()
+  })
 })
 
 describe("Store.simulateQuestion", () => {

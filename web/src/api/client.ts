@@ -1,7 +1,13 @@
-import type { Board, Roster, TicketThread } from "@/types/domain"
+import type { Board, Project, Roster, TicketThread } from "@/types/domain"
 
 export type PermissionDecision = "allow" | "deny"
 export type PermissionScope = "once" | "always" | "session"
+
+export interface CreateProjectInput {
+  name: string
+  git_remote?: string | null
+  default_branch?: string
+}
 
 export interface CreateTicketInput {
   project_id: string
@@ -13,6 +19,7 @@ export interface CreateTicketInput {
 export interface ColumnInput {
   name: string
   prompt: string | null
+  model: string | null
   next_column: string | null
   fail_column: string | null
   wip_limit: number | null
@@ -63,6 +70,7 @@ export interface AlmadelClient {
   listMessages(agentId: string): Promise<Message[]>
 
   // Mutations
+  createProject(input: CreateProjectInput): Promise<Project>
   createTicket(input: CreateTicketInput): Promise<void>
   draftTicket(input: DraftTicketInput): Promise<TicketDraft>
   moveTicket(ticketId: string, input: MoveTicketInput): Promise<void>

@@ -1,7 +1,7 @@
 import type { AlmadelClient } from "./http.ts";
 import type { AlmadelState } from "./state.ts";
 import { CommentKind } from "./types.ts";
-import { returnToRepoRoot } from "./git.ts";
+import { commitStage, pushBranch, GitError } from "./git.ts";
 import type { GitRunner } from "./git.ts";
 import { askQuestion } from "./ask.ts";
 import { z } from "zod";
@@ -24,6 +24,8 @@ export interface ToolDeps {
   state: AlmadelState;
   git: GitRunner;
   repoRoot: string;
+  label: string;
+  gitRemote: string | null;
   getBoard: () => Promise<ColumnRef[]>;
   enlist: (args: JoinArgs) => Promise<string>;
   leave: () => Promise<string>;
@@ -147,13 +149,51 @@ export async function makeAlmadelTools(deps: ToolDeps) {
       },
       async execute(args: { column: string; note?: string }): Promise<string> {
         const ticket = requireTicket(state);
-        await client.move(ticket, { column: args.column, note: args.note });
-        // Stage complete: keep the worktree + branch for review, re-anchor cwd
-        // back to the primary checkout for the next session.
-        await returnToRepoRoot(deps.git, deps.repoRoot);
+        const worktree = state.currentWorktree;
+        if (!worktree) {
+          return "no worktree is currently prepared — nothing to commit";
+        }
+        // Commit first, then push, then move, so a ticket's committed work is
+        // reachable before the server can hand the next stage to another agent.
+        let headSha: string | null;
+        try {
+          headSha = await commitStage(deps.git, {
+            worktree,
+            ticket,
+            column: args.column,
+            label: deps.label,
+            note: args.note,
+          });
+          if (headSha && deps.gitRemote) {
+            await pushBranch(deps.git, worktree, "origin", state.currentBranch ?? "");
+          }
+        } catch (err) {
+          // A failed commit/push must never become a successful move.
+          const msg = err instanceof GitError ? err.message : String(err);
+          try {
+            await client.comment(ticket, {
+              kind: "comment",
+              body: `stage commit failed, ticket not moved: ${msg}`,
+            });
+          } catch (commentErr) {
+            // best-effort comment; the move is already refused
+          }
+          return `move aborted: ${msg}`;
+        }
+        await client.move(ticket, {
+          column: args.column,
+          note: args.note,
+          head_sha: headSha,
+        });
+        // Stage complete: keep the worktree + branch for review, but stay
+        // "working" until the session actually ends. The slot is recycled on
+        // session.idle / session.error (see index.ts), so the claim loop never
+        // pulls a new task before the agent finished committing its work.
+        state.pendingRecycle = true;
         state.currentWorktree = null;
+        state.currentBranch = null;
         state.currentTicket = null;
-        state.status = "idle";
+        state.currentModel = null;
         return "ticket moved; stage complete";
       },
     },

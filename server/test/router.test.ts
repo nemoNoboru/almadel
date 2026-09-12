@@ -108,6 +108,36 @@ describe("roster + projects", () => {
     expect(await res!.json()).toEqual([{ id: "almadel-api", name: "almadel-api" }])
   })
 
+  test("POST /api/projects creates a project with the default board", async () => {
+    const db = testDb()
+    const res = await api(db, config, "POST", "/api/projects", {
+      body: { name: "acme", git_remote: "git@github.com:acme/acme.git" },
+    })
+    expect(res!.status).toBe(201)
+    const project = await res!.json()
+    expect(project.id).toMatch(/^prj_/)
+    expect(project.name).toBe("acme")
+    expect(project.git_remote).toBe("git@github.com:acme/acme.git")
+    expect(project.default_branch).toBe("main")
+
+    const boardRes = await api(db, config, "GET", `/api/projects/${project.id}/board`)
+    expect(boardRes!.status).toBe(200)
+    const board = await boardRes!.json()
+    expect(board.columns.map((c: { name: string }) => c.name)).toEqual([
+      "Spec", "Planning", "Review", "Implement", "Testing", "Done", "Failed",
+    ])
+  })
+
+  test("POST /api/projects 400s on invalid body and 409s on duplicate name", async () => {
+    const db = testDb()
+    const bad = await api(db, config, "POST", "/api/projects", { body: {} })
+    expect(bad!.status).toBe(400)
+    expect((await bad!.json()).error).toBe("invalid project")
+
+    const dup = await api(db, config, "POST", "/api/projects", { body: { name: "almadel-api" } })
+    expect(dup!.status).toBe(409)
+  })
+
   test("GET /api/projects/{id}/board 404s for unknown project", async () => {
     const res = await api(testDb(), config, "GET", "/api/projects/nope/board")
     expect(res!.status).toBe(404)
@@ -130,11 +160,21 @@ describe("roster + projects", () => {
     expect((await got!.json()) as unknown[]).toHaveLength(7)
 
     const put = await api(db, config, "PUT", "/api/projects/almadel-api/columns", {
-      body: { columns: [{ name: "Backlog", prompt: null, next_column: null, fail_column: null, wip_limit: null }] },
+      body: { columns: [{ name: "Backlog", prompt: null, model: null, next_column: null, fail_column: null, wip_limit: null }] },
     })
     expect(put!.status).toBe(200)
     const body = (await put!.json()) as Array<{ name: string }>
     expect(body.map((c) => c.name)).toEqual(["Backlog"])
+  })
+
+  test("PUT columns round-trips the model field", async () => {
+    const db = testDb()
+    const put = await api(db, config, "PUT", "/api/projects/almadel-api/columns", {
+      body: { columns: [{ name: "Planning", prompt: "x", model: "anthropic/claude-opus-4-1", next_column: null, fail_column: null, wip_limit: null }] },
+    })
+    expect(put!.status).toBe(200)
+    const body = (await put!.json()) as Array<{ model: string | null }>
+    expect(body[0]?.model).toBe("anthropic/claude-opus-4-1")
   })
 
   test("PUT columns rejects invalid body with issues", async () => {

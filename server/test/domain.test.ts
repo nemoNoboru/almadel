@@ -7,7 +7,7 @@ import { askQuestion, decidePermission, reply, requestPermission } from "../src/
 import { claimNow, makeTaskJob } from "../src/domain/claim"
 import { sweep } from "../src/domain/lease"
 import { roster, thread } from "../src/domain/roster"
-import { board, cancelTicket, createTicket, getTicket, moveTicket } from "../src/domain/tickets"
+import { board, cancelTicket, createProject, createTicket, getTicket, moveTicket } from "../src/domain/tickets"
 
 function testDb(): Database {
   const db = new Database(":memory:")
@@ -38,6 +38,39 @@ describe("seeding", () => {
     const b = board(db, "almadel-api")!
     expect(b.project.id).toBe("almadel-api")
     expect(b.columns.map((c) => c.name)).toEqual(["Spec", "Planning", "Review", "Implement", "Testing", "Done", "Failed"])
+  })
+})
+
+describe("createProject", () => {
+  test("inserts a project with the default 7-column board", () => {
+    const db = testDb()
+    const p = createProject(db, { name: "acme", git_remote: "git@github.com:acme/acme.git" })
+    expect(p.id).toMatch(/^prj_/)
+    expect(p.name).toBe("acme")
+    expect(p.git_remote).toBe("git@github.com:acme/acme.git")
+    expect(p.default_branch).toBe("main")
+
+    const b = board(db, p.id)!
+    expect(b.columns.map((c) => c.name)).toEqual(["Spec", "Planning", "Review", "Implement", "Testing", "Done", "Failed"])
+    expect(b.tickets).toEqual([])
+  })
+
+  test("defaults git_remote to null and default_branch to main", () => {
+    const db = testDb()
+    const p = createProject(db, { name: "no-remote" })
+    expect(p.git_remote).toBeNull()
+    expect(p.default_branch).toBe("main")
+  })
+
+  test("honors an explicit default_branch", () => {
+    const db = testDb()
+    const p = createProject(db, { name: "trunk", default_branch: "trunk" })
+    expect(p.default_branch).toBe("trunk")
+  })
+
+  test("rejects a duplicate project name", () => {
+    const db = testDb()
+    expect(() => createProject(db, { name: "almadel-api" })).toThrow()
   })
 })
 
@@ -90,6 +123,30 @@ describe("claim", () => {
     expect(claimNow(db, "almadel-api", agent.agent_id)).toBeNull()
   })
 
+  test("a non-idle agent with no held ticket does not claim a new task", () => {
+    const db = testDb()
+    const agent = registerAgent(db, {
+      project: "almadel-api",
+      repo_root: "/srv/slots/1",
+      label: "laptop",
+      opencode_version: "1.5.0",
+      capabilities: { tools: true, permission_hook: true },
+    }, { minOpencodeVersion: "1.0.0", portBase: 8000, portBandWidth: 100 })
+
+    // After a move the agent holds no ticket, but its session is still
+    // committing, so the slot reports "working" until it flips back to idle.
+    db.query("UPDATE agents SET status = 'working', ticket_id = NULL WHERE id = ?").run(agent.agent_id)
+    createTicket(db, { project_id: "almadel-api", title: "next", column_id: "col-implement" })
+
+    expect(claimNow(db, "almadel-api", agent.agent_id)).toBeNull()
+
+    // Once the session ends the slot is idle and can claim again.
+    db.query("UPDATE agents SET status = 'idle', ticket_id = NULL WHERE id = ?").run(agent.agent_id)
+    const claimed = claimNow(db, "almadel-api", agent.agent_id)
+    expect(claimed).not.toBeNull()
+    expect(claimed!.state).toBe("running")
+  })
+
   test("a human-gate column is never claimed", () => {
     const db = testDb()
     const agent = registerAgent(db, {
@@ -123,6 +180,41 @@ describe("claim", () => {
       expect(job.prompt).toContain("implementation plan")
       expect(job.branch).toBe(`run/${ticket.id}`)
     }
+  })
+
+  test("the task job carries the column model when pinned", () => {
+    const db = testDb()
+    const agent = registerAgent(db, {
+      project: "almadel-api",
+      repo_root: "/srv/slots/1",
+      label: "laptop",
+      opencode_version: "1.5.0",
+      capabilities: { tools: true, permission_hook: true },
+    }, { minOpencodeVersion: "1.0.0", portBase: 8000, portBandWidth: 100 })
+
+    db.query("UPDATE columns SET model = ? WHERE id = ?").run("anthropic/claude-opus-4-1", "col-planning")
+    const ticket = createTicket(db, { project_id: "almadel-api", title: "x", column_id: "col-planning" })
+    claimNow(db, "almadel-api", agent.agent_id)
+    const job = makeTaskJob(db, getTicket(db, ticket.id)!, agent.agent_id)
+    expect(job.type).toBe("task")
+    if (job.type === "task") expect(job.model).toBe("anthropic/claude-opus-4-1")
+  })
+
+  test("the task job model is null when the column does not pin one", () => {
+    const db = testDb()
+    const agent = registerAgent(db, {
+      project: "almadel-api",
+      repo_root: "/srv/slots/1",
+      label: "laptop",
+      opencode_version: "1.5.0",
+      capabilities: { tools: true, permission_hook: true },
+    }, { minOpencodeVersion: "1.0.0", portBase: 8000, portBandWidth: 100 })
+
+    const ticket = createTicket(db, { project_id: "almadel-api", title: "x", column_id: "col-planning" })
+    claimNow(db, "almadel-api", agent.agent_id)
+    const job = makeTaskJob(db, getTicket(db, ticket.id)!, agent.agent_id)
+    expect(job.type).toBe("task")
+    if (job.type === "task") expect(job.model).toBeNull()
   })
 })
 

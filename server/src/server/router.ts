@@ -2,7 +2,16 @@ import type { Config } from "../config"
 import type { DB } from "../db"
 import { newId, now } from "../db"
 import { HttpError, zodIssues } from "../http-error"
-import { agentJobs, addRosterSub, addTicketSub, projectClaim, removeRosterSub, removeTicketSub } from "../notify"
+import {
+  addRosterSub,
+  addTicketSub,
+  agentJobs,
+  broadcastRoster,
+  broadcastTicket,
+  projectClaim,
+  removeRosterSub,
+  removeTicketSub,
+} from "../notify"
 import type { Agent, Ticket } from "../types"
 import {
   askSchema,
@@ -10,6 +19,7 @@ import {
   columnsPutSchema,
   commentSchema,
   commentUpdateSchema,
+  createProjectSchema,
   createTicketSchema,
   draftSchema,
   eventBatchSchema,
@@ -37,6 +47,7 @@ import {
   addComment,
   board,
   cancelTicket,
+  createProject,
   createTicket,
   getColumn,
   getProject,
@@ -163,6 +174,12 @@ export async function handleApi(
     // ---- projects ----------------------------------------------------------
     if (method === "GET" && path === "/api/projects") {
       return json(listProjects(db).map((p) => ({ id: p.id, name: p.name })))
+    }
+
+    if (method === "POST" && path === "/api/projects") {
+      const parsed = createProjectSchema.safeParse(await readJson(request))
+      if (!parsed.success) return error(400, "invalid project", zodIssues(parsed.error))
+      return json(createProject(db, parsed.data), 201)
     }
 
     const boardMatch = method === "GET" && /^\/api\/projects\/([^/]+)\/board$/.exec(path)
@@ -379,7 +396,7 @@ async function handleMove(db: DB, request: Request, ticketId: string, body: unkn
     if (!agent) return error(401, "invalid token")
     requireHeldTicket(db, agent, ticketId)
   }
-  const ticket = moveTicket(db, ticketId, parsed.data.column, parsed.data.note)
+  const ticket = moveTicket(db, ticketId, parsed.data.column, parsed.data.note, parsed.data.head_sha)
   return json(ticket)
 }
 
@@ -423,6 +440,8 @@ async function handleComment(db: DB, request: Request, ticketId: string, body: u
   const parsed = commentSchema.safeParse(body)
   if (!parsed.success) return error(400, "invalid comment", zodIssues(parsed.error))
   addComment(db, ticketId, "agent", parsed.data.kind, parsed.data.body ?? null)
+  broadcastTicket(ticketId, "{}")
+  broadcastRoster()
   return noContent()
 }
 
@@ -475,12 +494,13 @@ async function handlePutColumns(db: DB, projectId: string, body: unknown): Promi
   db.transaction(() => {
     db.query("DELETE FROM columns WHERE project_id = ?").run(projectId)
     const insert = db.query(
-      "INSERT INTO columns (id, project_id, name, position, prompt, next_column, fail_column, wip_limit) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO columns (id, project_id, name, position, prompt, model, next_column, fail_column, wip_limit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     columns.forEach((c, i) => {
-      insert.run(c.id ?? newId("col"), projectId, c.name, i, c.prompt, c.next_column, c.fail_column, c.wip_limit)
+      insert.run(c.id ?? newId("col"), projectId, c.name, i, c.prompt, c.model, c.next_column, c.fail_column, c.wip_limit)
     })
   })()
 
+  broadcastRoster()
   return json(listColumns(db, projectId))
 }

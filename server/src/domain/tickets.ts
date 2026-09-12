@@ -1,8 +1,8 @@
 import { agentJobs, broadcastRoster, broadcastTicket, projectClaim } from "../notify"
-import { mapColumn, mapComment, mapProject, nextTicketId, now } from "../db"
+import { insertDefaultBoard, mapColumn, mapComment, mapProject, newId, nextTicketId, now } from "../db"
 import type { DB } from "../db"
 import { HttpError } from "../http-error"
-import type { Board, Column, Comment, CommentAuthor, CommentKind, Ticket, TicketState } from "../types"
+import type { Board, Column, Comment, CommentAuthor, CommentKind, CreateProjectInput, Project, Ticket, TicketState } from "../types"
 import { getAgent } from "./agents"
 
 // ---------------------------------------------------------------------------
@@ -36,6 +36,28 @@ export function listProjects(db: DB) {
   return (
     db.query("SELECT * FROM projects ORDER BY name ASC").all() as Record<string, unknown>[]
   ).map((r) => mapProject(r)!)
+}
+
+export function createProject(db: DB, input: CreateProjectInput): Project {
+  const existing = db.query("SELECT id FROM projects WHERE name = ?").get(input.name) as
+    | { id: string }
+    | undefined
+  if (existing) throw new HttpError(409, "project name already exists")
+
+  const id = newId("prj")
+  const gitRemote = input.git_remote ?? null
+  const defaultBranch = input.default_branch ?? "main"
+  const ts = now()
+
+  db.transaction(() => {
+    db.query(
+      "INSERT INTO projects (id, name, git_remote, default_branch, created_at) VALUES (?, ?, ?, ?, ?)",
+    ).run(id, input.name, gitRemote, defaultBranch, ts)
+    insertDefaultBoard(db, id)
+  })()
+
+  broadcastRoster()
+  return getProject(db, id)!
 }
 
 export function getColumn(db: DB, id: string): Column | null {
@@ -72,6 +94,7 @@ export function mapTicket(row: Record<string, unknown>): Ticket {
     column_id: row.column_id as string,
     state: row.state as TicketState,
     branch: (row.branch as string | null) ?? null,
+    head_sha: (row.head_sha as string | null) ?? null,
     agent_id: (row.agent_id as string | null) ?? null,
     priority: (row.priority as number) ?? 0,
     claimed_at: (row.claimed_at as number | null) ?? null,
@@ -162,6 +185,7 @@ export function moveTicket(
   ticketId: string,
   columnId: string,
   note?: string,
+  headSha?: string | null,
 ): Ticket {
   const ticket = getTicket(db, ticketId)
   if (!ticket) throw new HttpError(404, "ticket not found")
@@ -185,8 +209,8 @@ export function moveTicket(
   const state = targetStateFor(column)
 
   db.query(
-    "UPDATE tickets SET column_id = ?, state = ?, agent_id = NULL, claimed_at = NULL WHERE id = ?",
-  ).run(columnId, state, ticketId)
+    "UPDATE tickets SET column_id = ?, state = ?, head_sha = COALESCE(?, head_sha), agent_id = NULL, claimed_at = NULL WHERE id = ?",
+  ).run(columnId, state, headSha ?? null, ticketId)
 
   if (ticket.agent_id) releaseAgent(db, ticket.agent_id)
 

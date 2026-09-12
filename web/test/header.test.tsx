@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { fireEvent, screen, waitFor } from "@testing-library/react"
+import { fireEvent, screen, waitFor, within } from "@testing-library/react"
 import { renderWithApp, makeState } from "./utils"
 import { Header } from "@/components/layout/Header"
 
@@ -30,11 +30,46 @@ describe("Header", () => {
     expect(screen.getByRole("button", { name: /toggle theme/i })).toBeInTheDocument()
   })
 
+  test("opens the new-project dialog", async () => {
+    renderWithApp(<Header />)
+    fireEvent.click(screen.getByRole("button", { name: /new project/i }))
+    const dialog = await screen.findByRole("dialog")
+    expect(dialog).toBeInTheDocument()
+    expect(within(dialog).getByLabelText("Name")).toBeInTheDocument()
+    expect(within(dialog).getByLabelText("Origin URL")).toBeInTheDocument()
+  })
+
   test("clicking the theme toggle flips the theme", async () => {
     renderWithApp(<Header />)
     fireEvent.click(screen.getByRole("button", { name: /toggle theme/i }))
     await waitFor(() =>
       expect(document.documentElement.classList.contains("light")).toBe(true),
     )
+  })
+
+  test("renders roster and chat toggle buttons", () => {
+    renderWithApp(<Header />)
+    expect(screen.getByRole("button", { name: /toggle roster/i })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /toggle chat/i })).toBeInTheDocument()
+  })
+
+  test("clicking the toggles calls the collapse callbacks", () => {
+    let rosterToggled = false
+    let chatToggled = false
+    renderWithApp(
+      <Header />,
+      makeState({
+        toggleRoster: () => {
+          rosterToggled = true
+        },
+        toggleChat: () => {
+          chatToggled = true
+        },
+      }),
+    )
+    fireEvent.click(screen.getByRole("button", { name: /toggle roster/i }))
+    fireEvent.click(screen.getByRole("button", { name: /toggle chat/i }))
+    expect(rosterToggled).toBe(true)
+    expect(chatToggled).toBe(true)
   })
 })
