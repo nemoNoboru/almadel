@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.package }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [server, web, plugin]
+    defaults:
+      run:
+        working-directory: ${{ matrix.package }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # The server e2e test reuses the plugin HTTP client directly from source,
+      # so its typecheck/test needs the plugin's own dependencies (zod etc.)
+      # resolvable from plugin/node_modules.
+      - name: Install plugin dependencies
+        if: matrix.package == 'server'
+        run: bun install --frozen-lockfile
+        working-directory: plugin
+
+      - name: Typecheck
+        if: matrix.package != 'web'
+        run: bun run typecheck
+
+      # The web package has no standalone `typecheck` script; `tsc -b` runs as
+      # part of the production build.
+      - name: Build
+        if: matrix.package == 'web'
+        run: bun run build
+
+      - name: Lint
+        if: matrix.package == 'web'
+        run: bun run lint
+
+      - name: Test
+        run: bun test
