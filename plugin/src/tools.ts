@@ -1,7 +1,6 @@
 import type { AlmadelClient } from "./http.ts";
 import type { AlmadelState } from "./state.ts";
 import { CommentKind } from "./types.ts";
-import { returnToRepoRoot } from "./git.ts";
 import type { GitRunner } from "./git.ts";
 import { askQuestion } from "./ask.ts";
 import { z } from "zod";
@@ -124,12 +123,13 @@ export async function makeAlmadelTools(deps: ToolDeps) {
       async execute(args: { column: string; note?: string }): Promise<string> {
         const ticket = requireTicket(state);
         await client.move(ticket, { column: args.column, note: args.note });
-        // Stage complete: keep the worktree + branch for review, re-anchor cwd
-        // back to the primary checkout for the next session.
-        await returnToRepoRoot(deps.git, deps.repoRoot);
+        // Stage complete: keep the worktree + branch for review, but stay
+        // "working" until the session actually ends. The slot is recycled on
+        // session.idle / session.error (see index.ts), so the claim loop never
+        // pulls a new task before the agent finished committing its work.
+        state.pendingRecycle = true;
         state.currentWorktree = null;
         state.currentTicket = null;
-        state.status = "idle";
         return "ticket moved; stage complete";
       },
     },

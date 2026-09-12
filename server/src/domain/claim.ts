@@ -40,11 +40,14 @@ interface ClaimRow {
 export function claimNow(db: DB, projectId: string, agentId: string): Ticket | null {
   const run = db.transaction(() => {
     // An agent already holding a ticket (working or blocked) never claims a
-    // second one — new work waits for the slot to be recycled (§11.9).
-    const held = db.query("SELECT ticket_id FROM agents WHERE id = ?").get(agentId) as
-      | { ticket_id: string | null }
+    // second one — new work waits for the slot to be recycled (§11.9). After a
+    // move the agent has no ticket but a non-idle status (the plugin reports
+    // idle only once its session has actually finished), so gate on status too:
+    // no new task until the slot flips back to idle.
+    const held = db.query("SELECT ticket_id, status FROM agents WHERE id = ?").get(agentId) as
+      | { ticket_id: string | null; status: string }
       | undefined
-    if (held?.ticket_id) return null
+    if (held?.ticket_id || held?.status !== "idle") return null
 
     const row = db.query(CLAIM_SELECT).get(projectId) as ClaimRow | undefined
     if (!row) return null
