@@ -40,6 +40,30 @@ describe("ConversationPanel — thread", () => {
     expect(screen.getByText("plan")).toBeInTheDocument()
   })
 
+  test("renders agent markdown comment bodies as formatted content", () => {
+    const thread = makeThread({
+      ticket: makeThread().ticket,
+      comments: [
+        {
+          id: 1,
+          ticket_id: "TCK-3",
+          author: "agent",
+          kind: "comment",
+          body: "## Steps\n\n- one\n- two",
+          created_at: 1,
+          updated_at: null,
+        },
+      ],
+    })
+    const { container } = renderWithApp(
+      <ConversationPanel />,
+      makeState({ selectedTicketId: "TCK-3", thread }),
+    )
+    expect(container.querySelector("h2")).toHaveTextContent("Steps")
+    expect(container.querySelector("ul")?.querySelectorAll("li")).toHaveLength(2)
+    expect(container.textContent).not.toContain("##")
+  })
+
   test("close button clears the conversation", () => {
     const closeConversation = vi.fn()
     renderWithApp(

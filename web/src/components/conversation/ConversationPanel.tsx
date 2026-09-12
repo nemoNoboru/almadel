@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { useApp } from "@/state/AppProvider"
 import type { Comment } from "@/types/domain"
+import { Markdown } from "@/components/Markdown"
 import { relativeTime, ticketStateLabel, isBlocked } from "@/lib/display"
 
 export function ConversationPanel() {
@@ -266,7 +267,7 @@ function CommentRow({ ticketId, comment }: { ticketId: string; comment: Comment 
             </div>
           </div>
         ) : (
-          <p className="whitespace-pre-wrap">{comment.body}</p>
+          <Markdown>{comment.body}</Markdown>
         )}
       </div>
       <span className="flex items-center gap-1 text-xs text-muted-foreground">
