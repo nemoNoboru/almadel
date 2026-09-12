@@ -1,0 +1,13 @@
+.git
+.almadel
+**/node_modules
+web/dist
+server/ui
+server/dist
+plugin/dist
+e2e
+plan
+vision.md
+*.log
+.env
+.env.*
