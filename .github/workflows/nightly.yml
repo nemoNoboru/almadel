@@ -1,0 +1,94 @@
+name: Nightly
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  nightly:
+    name: Build and publish nightly
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      # Build chain mirroring release.yml: web UI -> bundled server -> CLI -> plugin.
+      - name: Build web UI
+        working-directory: web
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+
+      - name: Bundle UI into server
+        working-directory: server
+        run: |
+          bun install --frozen-lockfile
+          bun run build:ui
+
+      - name: Compile CLI
+        working-directory: server
+        run: bun run build:cli
+
+      - name: Bundle plugin
+        working-directory: plugin
+        run: |
+          bun install --frozen-lockfile
+          bun build src/index.ts --target bun --outdir dist
+
+      - name: Assemble nightly package
+        id: assemble
+        run: |
+          export STAGE="$RUNNER_TEMP/stage"
+          export OUT="$RUNNER_TEMP/out"
+          rm -rf "$STAGE" "$OUT"
+          mkdir -p "$STAGE" "$OUT"
+
+          cp server/package.json "$STAGE/package.json"
+          cp -r server/dist "$STAGE/dist"
+          cp -r server/ui "$STAGE/ui"
+          cp LICENSE "$STAGE/LICENSE"
+          cp server/README.md "$STAGE/README.md"
+
+          bun -e '
+            const fs = require("node:fs");
+            const path = process.env.STAGE + "/package.json";
+            const p = JSON.parse(fs.readFileSync(path, "utf8"));
+            p.version = "0.0.0-nightly";
+            p.bin = { almadel: "dist/cli.js" };
+            p.files = ["dist", "ui"];
+            fs.writeFileSync(path, JSON.stringify(p, null, 2) + "\n");
+          '
+
+          tar -czf "$OUT/almadel-nightly.tgz" -C "$STAGE" .
+          cp plugin/dist/index.js "$OUT/almadel-plugin-nightly.js"
+
+          echo "out=$OUT" >> "$GITHUB_OUTPUT"
+
+      - name: Stage nightly assets
+        run: cp -a "${{ steps.assemble.outputs.out }}"/. "$GITHUB_WORKSPACE/"
+
+      # Keep the rolling `nightly` tag pinned to the latest main commit so the
+      # pre-release below always reflects HEAD.
+      - name: Move nightly tag
+        run: git push --force origin "$GITHUB_SHA:refs/tags/nightly"
+
+      # Update-in-place: softprops reuses the existing `nightly` release and
+      # overwrites its assets.
+      - name: Publish nightly release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly
+          name: nightly
+          prerelease: true
+          body: "Automated nightly build from the latest commit on `main`."
+          files: |
+            almadel-nightly.tgz
+            almadel-plugin-nightly.js
