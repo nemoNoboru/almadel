@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "bun:test"
-import { fireEvent, screen, waitFor } from "@testing-library/react"
+import { fireEvent, screen, waitFor, within } from "@testing-library/react"
 import { renderWithApp, makeState, makeThread } from "./utils"
 import { ConversationPanel } from "@/components/conversation/ConversationPanel"
 import type { Roster as RosterType } from "@/types/domain"
@@ -356,5 +356,53 @@ describe("ConversationPanel — comment editing", () => {
     })
     renderWithApp(<ConversationPanel />, makeState({ selectedTicketId: "TCK-3", thread }))
     expect(screen.queryByRole("button", { name: /edit comment/i })).toBeNull()
+  })
+})
+
+describe("ConversationPanel — resizable width", () => {
+  test("renders the panel at the persisted width with a drag handle", () => {
+    const { container } = renderWithApp(
+      <ConversationPanel />,
+      makeState({ selectedTicketId: "TCK-3", thread: makeThread(), chatWidth: 480 }),
+    )
+    expect(container.querySelector("aside")?.style.width).toBe("480px")
+    expect(container.querySelector('[class*="cursor-col-resize"]')).not.toBeNull()
+  })
+
+  test("dragging the left handle resizes the panel", () => {
+    const setChatWidth = vi.fn()
+    const { container } = renderWithApp(
+      <ConversationPanel />,
+      makeState({
+        selectedTicketId: "TCK-3",
+        thread: makeThread(),
+        chatWidth: 384,
+        setChatWidth,
+      }),
+    )
+    const handle = container.querySelector('[class*="cursor-col-resize"]') as HTMLElement
+    fireEvent.pointerDown(handle, { clientX: 500 })
+    fireEvent.pointerMove(window, { clientX: 400 })
+    fireEvent.pointerUp(window)
+    expect(setChatWidth).toHaveBeenCalledWith(484)
+  })
+})
+
+describe("ConversationPanel — wider view modal", () => {
+  test("opens a modal that mirrors the thread and closes again", () => {
+    renderWithApp(
+      <ConversationPanel />,
+      makeState({ selectedTicketId: "TCK-3", thread: makeThread() }),
+    )
+    const expand = screen.getByRole("button", { name: /open in wider view/i })
+    expect(expand).toBeInTheDocument()
+
+    fireEvent.click(expand)
+    const dialog = screen.getByRole("dialog")
+    expect(dialog).toBeInTheDocument()
+    expect(screen.getAllByText("Which backend?")).toHaveLength(2)
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /close/i }))
+    expect(screen.queryByRole("dialog")).toBeNull()
   })
 })

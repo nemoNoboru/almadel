@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useMemo, useState, type PointerEvent as ReactPointerEvent } from "react"
 import { toast } from "sonner"
 import { cn } from "cn"
 import {
@@ -7,6 +7,7 @@ import {
   CheckIcon,
   CornerDownLeftIcon,
   GitBranchIcon,
+  Maximize2Icon,
   PencilIcon,
   SendIcon,
   UserIcon,
@@ -36,14 +37,28 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { useApp } from "@/state/AppProvider"
-import type { Comment } from "@/types/domain"
+import type { Agent, Comment, TicketThread } from "@/types/domain"
 import { Markdown } from "@/components/Markdown"
 import { relativeTime, ticketStateLabel, isBlocked } from "@/lib/display"
 
 export function ConversationPanel() {
-  const { selectedTicketId, thread, loadingThread, roster, closeConversation } =
-    useApp()
+  const {
+    selectedTicketId,
+    thread,
+    loadingThread,
+    roster,
+    chatWidth,
+    setChatWidth,
+    closeConversation,
+  } = useApp()
+  const [modalOpen, setModalOpen] = useState(false)
 
   const agent = useMemo(() => {
     if (!thread?.ticket.agent_id) return null
@@ -54,9 +69,22 @@ export function ConversationPanel() {
     return null
   }, [thread, roster])
 
+  const beginResize = (e: ReactPointerEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    const startX = e.clientX
+    const startWidth = chatWidth
+    const onMove = (ev: PointerEvent) => setChatWidth(startWidth - (ev.clientX - startX))
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove)
+      window.removeEventListener("pointerup", onUp)
+    }
+    window.addEventListener("pointermove", onMove)
+    window.addEventListener("pointerup", onUp)
+  }
+
   if (!selectedTicketId) {
     return (
-      <aside className="flex min-h-0 w-96 shrink-0 flex-col border-l">
+      <aside className="flex min-h-0 shrink-0 flex-col border-l" style={{ width: chatWidth }}>
         <div className="flex flex-1 items-center justify-center p-6">
           <Empty>
             <EmptyMedia variant="icon">
@@ -75,7 +103,7 @@ export function ConversationPanel() {
 
   if (loadingThread && !thread) {
     return (
-      <aside className="flex min-h-0 w-96 shrink-0 flex-col gap-2 border-l p-3">
+      <aside className="flex min-h-0 shrink-0 flex-col gap-2 border-l p-3" style={{ width: chatWidth }}>
         <Skeleton className="h-6 w-2/3" />
         <Skeleton className="h-40 w-full" />
         <Skeleton className="h-10 w-full" />
@@ -85,7 +113,7 @@ export function ConversationPanel() {
 
   if (!thread) {
     return (
-      <aside className="flex min-h-0 w-96 shrink-0 flex-col border-l">
+      <aside className="flex min-h-0 shrink-0 flex-col border-l" style={{ width: chatWidth }}>
         <div className="flex flex-1 items-center justify-center p-6">
           <Empty>
             <EmptyTitle>Ticket not found</EmptyTitle>
@@ -102,37 +130,78 @@ export function ConversationPanel() {
   const blocked = isBlocked(ticket.state)
 
   return (
-    <aside className="flex min-h-0 w-96 shrink-0 flex-col border-l">
-      <div className="flex items-center gap-2 border-b px-3 py-2">
-        <div className="flex min-w-0 flex-col">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-muted-foreground">
-              {ticket.id}
-            </span>
-            <Badge
-              className={cn(
-                "px-1.5 text-[10px]",
-                blocked
-                  ? "bg-warning/15 text-warning-foreground dark:text-warning"
-                  : "bg-secondary text-secondary-foreground",
-              )}
-            >
-              {ticketStateLabel[ticket.state]}
-            </Badge>
+    <>
+      <aside className="relative flex min-h-0 shrink-0 flex-col border-l" style={{ width: chatWidth }}>
+        <div
+          aria-hidden="true"
+          className="absolute inset-y-0 left-0 z-10 w-1 -translate-x-1/2 cursor-col-resize transition-colors hover:bg-primary/40"
+          onPointerDown={beginResize}
+        />
+        <div className="flex items-center gap-2 border-b px-3 py-2">
+          <div className="flex min-w-0 flex-col">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-muted-foreground">
+                {ticket.id}
+              </span>
+              <Badge
+                className={cn(
+                  "px-1.5 text-[10px]",
+                  blocked
+                    ? "bg-warning/15 text-warning-foreground dark:text-warning"
+                    : "bg-secondary text-secondary-foreground",
+                )}
+              >
+                {ticketStateLabel[ticket.state]}
+              </Badge>
+            </div>
+            <p className="truncate text-sm font-medium">{ticket.title}</p>
           </div>
-          <p className="truncate text-sm font-medium">{ticket.title}</p>
+          <div className="flex-1" />
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Open in wider view"
+            onClick={() => setModalOpen(true)}
+          >
+            <Maximize2Icon data-icon="inline-start" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Close conversation"
+            onClick={closeConversation}
+          >
+            <XIcon data-icon="inline-start" />
+          </Button>
         </div>
-        <div className="flex-1" />
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Close conversation"
-          onClick={closeConversation}
-        >
-          <XIcon data-icon="inline-start" />
-        </Button>
-      </div>
 
+        <ConversationBody ticketId={ticket.id} agent={agent} thread={thread} />
+      </aside>
+
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent className="flex h-[85vh] flex-col sm:max-w-3xl">
+          <DialogHeader className="shrink-0 pr-8">
+            <DialogTitle>{ticket.title}</DialogTitle>
+            <span className="text-xs font-medium text-muted-foreground">{ticket.id}</span>
+          </DialogHeader>
+          <ConversationBody ticketId={ticket.id} agent={agent} thread={thread} />
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
+function ConversationBody({
+  ticketId,
+  agent,
+  thread,
+}: {
+  ticketId: string
+  agent: Agent | null
+  thread: TicketThread
+}) {
+  return (
+    <>
       <ScrollArea className="min-h-0 flex-1">
         <div className="flex flex-col gap-3 p-3">
           {agent && !agent.online && (
@@ -141,7 +210,7 @@ export function ConversationPanel() {
             </Alert>
           )}
 
-          <Thread ticketId={ticket.id} comments={thread.comments} />
+          <Thread ticketId={ticketId} comments={thread.comments} />
 
           {thread.pending
             .filter((p) => p.sent_at == null)
@@ -161,8 +230,8 @@ export function ConversationPanel() {
         </div>
       </ScrollArea>
 
-      <ComposeArea key={ticket.id} ticketId={ticket.id} agentOnline={agent?.online ?? false} />
-    </aside>
+      <ComposeArea key={ticketId} ticketId={ticketId} agentOnline={agent?.online ?? false} />
+    </>
   )
 }
 
