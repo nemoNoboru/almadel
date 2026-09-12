@@ -37,6 +37,7 @@ export interface AppState {
   error: string | null
   rosterCollapsed: boolean
   chatCollapsed: boolean
+  chatWidth: number
 
   selectProject: (id: string) => void
   selectTicket: (id: string) => void
@@ -46,6 +47,7 @@ export interface AppState {
   sendAgentMessage: (agentId: string, body: string) => Promise<void>
   toggleRoster: () => void
   toggleChat: () => void
+  setChatWidth: (width: number) => void
   moveTicket: (ticketId: string, columnId: string, opts?: MoveOptions) => Promise<void>
   createTicket: (input: {
     project_id: string
@@ -74,6 +76,31 @@ const COLLAPSE_KEYS = {
   roster: "almadel.rosterCollapsed",
   chat: "almadel.chatCollapsed",
 } as const
+
+const CHAT_WIDTH_KEY = "almadel.chatWidth"
+const CHAT_WIDTH_MIN = 320
+const CHAT_WIDTH_MAX = 720
+const CHAT_WIDTH_DEFAULT = 384
+
+function readWidth(): number {
+  try {
+    const raw = Number(localStorage.getItem(CHAT_WIDTH_KEY))
+    if (Number.isFinite(raw)) {
+      return Math.min(CHAT_WIDTH_MAX, Math.max(CHAT_WIDTH_MIN, raw))
+    }
+  } catch {
+    // Fall through to the default.
+  }
+  return CHAT_WIDTH_DEFAULT
+}
+
+function writeWidth(value: number) {
+  try {
+    localStorage.setItem(CHAT_WIDTH_KEY, String(value))
+  } catch {
+    // Persistence is best-effort; ignore storage failures (private mode, etc).
+  }
+}
 
 function readCollapsed(key: string): boolean {
   try {
@@ -107,6 +134,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null)
   const [rosterCollapsed, setRosterCollapsed] = useState(() => readCollapsed(COLLAPSE_KEYS.roster))
   const [chatCollapsed, setChatCollapsed] = useState(() => readCollapsed(COLLAPSE_KEYS.chat))
+  const [chatWidth, setChatWidthState] = useState(readWidth)
 
   // Refs so stream callbacks read current values without re-subscribing.
   const selectedTicketRef = useRef<string | null>(null)
@@ -254,6 +282,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
+  const setChatWidth = useCallback((width: number) => {
+    const clamped = Math.min(CHAT_WIDTH_MAX, Math.max(CHAT_WIDTH_MIN, width))
+    setChatWidthState(clamped)
+    writeWidth(clamped)
+  }, [])
+
   const sendAgentMessage = useCallback(
     async (agentId: string, body: string) => {
       await client.sendMessage(agentId, body)
@@ -399,6 +433,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       error,
       rosterCollapsed,
       chatCollapsed,
+      chatWidth,
       selectProject,
       selectTicket,
       selectAgent,
@@ -407,6 +442,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       sendAgentMessage,
       toggleRoster,
       toggleChat,
+      setChatWidth,
       moveTicket,
       createTicket,
       reply,
@@ -433,6 +469,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       error,
       rosterCollapsed,
       chatCollapsed,
+      chatWidth,
       selectProject,
       selectTicket,
       selectAgent,
@@ -441,6 +478,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       sendAgentMessage,
       toggleRoster,
       toggleChat,
+      setChatWidth,
       moveTicket,
       createTicket,
       reply,
