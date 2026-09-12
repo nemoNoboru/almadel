@@ -3,6 +3,7 @@ import { mapColumn, mapComment, mapProject, nextTicketId, now } from "../db"
 import type { DB } from "../db"
 import { HttpError } from "../http-error"
 import type { Board, Column, Comment, CommentAuthor, CommentKind, Ticket, TicketState } from "../types"
+import { getAgent } from "./agents"
 
 // ---------------------------------------------------------------------------
 // Column classification
@@ -128,7 +129,7 @@ export function updateComment(db: DB, ticketId: string, commentId: number, body:
 
 export function createTicket(
   db: DB,
-  input: { project_id: string; title: string; body?: string; column_id: string },
+  input: { project_id: string; title: string; body?: string; column_id: string; creatorAgentId?: string },
 ): Ticket {
   const project = getProject(db, input.project_id)
   if (!project) throw new HttpError(404, "project not found")
@@ -145,6 +146,11 @@ export function createTicket(
   ).run(id, input.project_id, input.title, input.body ?? null, input.column_id, state, ts)
 
   const ticket = getTicket(db, id)!
+
+  if (input.creatorAgentId) {
+    const creator = getAgent(db, input.creatorAgentId)
+    addComment(db, id, "system", "comment", `created by agent ${creator?.name ?? "agent"}`)
+  }
 
   if (column.prompt != null) projectClaim.broadcast(project.id, undefined)
   broadcastRoster()

@@ -9,6 +9,7 @@ import { z } from "zod";
 export interface ColumnRef {
   id: string;
   name: string;
+  prompt: string | null;
 }
 
 export interface JoinArgs {
@@ -54,6 +55,9 @@ export async function makeAlmadelTools(deps: ToolDeps) {
   const columns = await deps.getBoard();
   const colEnum = columnEnum(columns);
   const colDesc = describeColumns(columns);
+  const manualColumns = columns.filter((c) => c.prompt === null);
+  const manualColEnum = columnEnum(manualColumns);
+  const manualColDesc = describeColumns(manualColumns);
 
   return {
     almadel_join: {
@@ -98,6 +102,26 @@ export async function makeAlmadelTools(deps: ToolDeps) {
         const ticket = requireTicket(state);
         const thread = await client.getTicket(ticket);
         return JSON.stringify(thread, null, 2);
+      },
+    },
+
+    almadel_create_ticket: {
+      description:
+        `Create a new ticket on a manual (human-gated) column so the work lands in a column a human must drag forward. ` +
+        `Use to decompose a task or record follow-up work from an integration. Valid columns: ${manualColDesc}.`,
+      args: {
+        title: z.string().min(1),
+        body: z.string().optional(),
+        column: manualColEnum,
+      },
+      async execute(args: { title: string; body?: string; column: string }): Promise<string> {
+        if (!state.projectId) return "not joined to an Almadel server";
+        const ticket = await client.createTicket(state.projectId, {
+          title: args.title,
+          body: args.body,
+          column_id: args.column,
+        });
+        return `created ticket ${ticket.id}`;
       },
     },
 

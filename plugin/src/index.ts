@@ -217,7 +217,7 @@ export const AlmadelPlugin: Plugin = async (input: PluginInput) => {
       if (!state.projectId) return [];
       const board = await http.getBoard(state.projectId);
       state.board = board;
-      return board.columns.map((c) => ({ id: c.id, name: c.name }));
+      return board.columns.map((c) => ({ id: c.id, name: c.name, prompt: c.prompt }));
     },
   });
 

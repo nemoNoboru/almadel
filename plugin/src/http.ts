@@ -3,6 +3,7 @@ import type {
   Board,
   ClaimBody,
   CommentInput,
+  CreateTicketInput,
   EventBatch,
   Job,
   MoveTicketInput,
@@ -94,6 +95,16 @@ export class AlmadelClient {
 
   getBoard(projectId: string): Promise<Board> {
     return this.request<Board>(`/api/projects/${projectId}/board`);
+  }
+
+  createTicket(
+    projectId: string,
+    input: Omit<CreateTicketInput, "project_id">,
+  ): Promise<{ id: string }> {
+    return this.request<{ id: string }>("/api/tickets", {
+      method: "POST",
+      body: JSON.stringify({ ...input, project_id: projectId }),
+    });
   }
 
   register(input: RegistrationInput): Promise<RegistrationResult> {

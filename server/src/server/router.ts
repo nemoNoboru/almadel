@@ -38,8 +38,10 @@ import {
   board,
   cancelTicket,
   createTicket,
+  getColumn,
   getProject,
   getTicket,
+  isPrompted,
   listColumns,
   listProjects,
   moveTicket,
@@ -205,7 +207,17 @@ export async function handleApi(
     if (method === "POST" && path === "/api/tickets") {
       const parsed = createTicketSchema.safeParse(await readJson(request))
       if (!parsed.success) return error(400, "invalid ticket", zodIssues(parsed.error))
-      const ticket = createTicket(db, parsed.data)
+      let creatorAgentId: string | undefined
+      if (hasBearer(request)) {
+        const agent = resolveBearer(db, request)
+        if (!agent) return error(401, "invalid token")
+        if (agent.project_id !== parsed.data.project_id) return error(403, "not your project")
+        const column = getColumn(db, parsed.data.column_id)
+        if (!column || column.project_id !== parsed.data.project_id) return error(400, "column out of scope")
+        if (isPrompted(column)) return error(400, "agents can only create tickets on manual columns")
+        creatorAgentId = agent.id
+      }
+      const ticket = createTicket(db, { ...parsed.data, creatorAgentId })
       return json(ticket, 201)
     }
     if (method === "POST" && path === "/api/tickets/draft") {
