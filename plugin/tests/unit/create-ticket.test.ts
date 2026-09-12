@@ -39,7 +39,7 @@ describe("almadel_create_ticket", () => {
     const result = await tools.almadel_create_ticket.execute({
       title: "subtask",
       body: "do x",
-      column: "col-spec",
+      column: "Spec",
     });
 
     expect(result).toBe("created ticket TCK-999");
@@ -51,14 +51,14 @@ describe("almadel_create_ticket", () => {
   test("column enum only contains manual columns", async () => {
     const tools = await makeAlmadelTools(deps());
     const colEnum = tools.almadel_create_ticket.args.column;
-    expect(colEnum.safeParse("col-spec").success).toBe(true);
-    expect(colEnum.safeParse("col-review").success).toBe(true);
-    expect(colEnum.safeParse("col-implement").success).toBe(false);
+    expect(colEnum.safeParse("Spec").success).toBe(true);
+    expect(colEnum.safeParse("Review").success).toBe(true);
+    expect(colEnum.safeParse("Implement").success).toBe(false);
   });
 
   test("returns a message when not joined to a server", async () => {
     const tools = await makeAlmadelTools(deps());
-    expect(await tools.almadel_create_ticket.execute({ title: "x", column: "col-spec" })).toBe(
+    expect(await tools.almadel_create_ticket.execute({ title: "x", column: "Spec" })).toBe(
       "not joined to an Almadel server",
     );
   });
