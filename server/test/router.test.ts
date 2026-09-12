@@ -321,6 +321,63 @@ describe("tickets", () => {
   })
 })
 
+describe("agent ticket creation", () => {
+  test("token + manual column creates a ready ticket with a system comment", async () => {
+    const db = testDb()
+    const agent = register(db)
+    const res = await api(db, config, "POST", "/api/tickets", {
+      token: agent.token,
+      body: { project_id: "almadel-api", title: "subtask", column_id: "col-spec" },
+    })
+    expect(res!.status).toBe(201)
+    const ticket = (await res!.json()) as { id: string; state: string }
+    expect(ticket.state).toBe("ready")
+    const comments = db.query("SELECT * FROM comments WHERE ticket_id = ?").all(ticket.id) as Array<{
+      author: string
+      body: string | null
+    }>
+    expect(comments.some((c) => c.author === "system" && (c.body ?? "").includes("created by agent"))).toBe(true)
+  })
+
+  test("token + foreign project 403s", async () => {
+    const db = testDb()
+    const agent = register(db)
+    const res = await api(db, config, "POST", "/api/tickets", {
+      token: agent.token,
+      body: { project_id: "other-project", title: "x", column_id: "col-spec" },
+    })
+    expect(res!.status).toBe(403)
+  })
+
+  test("token + prompted column 400s", async () => {
+    const db = testDb()
+    const agent = register(db)
+    const res = await api(db, config, "POST", "/api/tickets", {
+      token: agent.token,
+      body: { project_id: "almadel-api", title: "x", column_id: "col-implement" },
+    })
+    expect(res!.status).toBe(400)
+    expect((await res!.json()).error).toBe("agents can only create tickets on manual columns")
+  })
+
+  test("invalid token 401s", async () => {
+    const db = testDb()
+    const res = await api(db, config, "POST", "/api/tickets", {
+      token: "bogus",
+      body: { project_id: "almadel-api", title: "x", column_id: "col-spec" },
+    })
+    expect(res!.status).toBe(401)
+  })
+
+  test("no token still allows any column (browser path)", async () => {
+    const db = testDb()
+    const res = await api(db, config, "POST", "/api/tickets", {
+      body: { project_id: "almadel-api", title: "x", column_id: "col-implement" },
+    })
+    expect(res!.status).toBe(201)
+  })
+})
+
 describe("comment editing", () => {
   test("PATCH updates a non-system comment and sets updated_at", async () => {
     const db = testDb()

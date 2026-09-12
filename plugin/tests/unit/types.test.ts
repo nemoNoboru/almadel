@@ -107,7 +107,10 @@ describe("parseModel", () => {
 
 describe("columnEnum", () => {
   test("off-board column is structurally impossible", () => {
-    const e = columnEnum([{ id: "a", name: "Planning" }, { id: "b", name: "Done" }]);
+    const e = columnEnum([
+      { id: "a", name: "Planning", prompt: null },
+      { id: "b", name: "Done", prompt: null },
+    ]);
     expect(e.safeParse("a").success).toBe(true);
     expect(e.safeParse("zzz").success).toBe(false);
   });

@@ -113,6 +113,18 @@ Body: `{ "project_id", "title", "body?", "column_id" }` → `201` with the creat
 ticket. `400` with `issues` if invalid; `400 column out of scope` if the column
 doesn't belong to the project.
 
+With a `Bearer` token the request is treated as an agent creating a ticket
+rather than a browser card. The agent path is restricted to **manual columns**
+(`prompt === null`, i.e. human gates) so decomposition/integration work can
+never auto-dispatch:
+
+- `401 invalid token` — the token does not resolve to a registered agent.
+- `403 not your project` — `project_id` does not match the agent's own project.
+- `400 agents can only create tickets on manual columns` — the target column has
+  a prompt.
+- On success a system comment `created by agent <name>` is written for
+  traceability.
+
 #### `POST /api/tickets/draft`
 
 Body: `{ "project_id", "agent_id", "instruction" }` → `{ "title", "body", "agent_name" }`.

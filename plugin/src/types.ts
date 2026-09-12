@@ -186,6 +186,14 @@ export const moveTicketSchema = z.object({
 });
 export type MoveTicketInput = z.infer<typeof moveTicketSchema>;
 
+export const createTicketSchema = z.object({
+  project_id: z.string().min(1),
+  title: z.string().min(1),
+  body: z.string().optional(),
+  column_id: z.string().min(1),
+});
+export type CreateTicketInput = z.infer<typeof createTicketSchema>;
+
 export const commentSchema = z.object({
   kind: CommentKind,
   body: z.string().optional(),
