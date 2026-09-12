@@ -111,7 +111,8 @@ describe("columnEnum", () => {
       { id: "a", name: "Planning", prompt: null },
       { id: "b", name: "Done", prompt: null },
     ]);
-    expect(e.safeParse("a").success).toBe(true);
+    expect(e.safeParse("Planning").success).toBe(true);
+    expect(e.safeParse("a").success).toBe(false);
     expect(e.safeParse("zzz").success).toBe(false);
   });
 

@@ -41,15 +41,15 @@ export function requireTicket(state: AlmadelState): string {
   return state.currentTicket;
 }
 
-/** Column list as a zod enum, so off-board moves are structurally impossible. */
+/** Column list as a zod enum (by name), so off-board moves are structurally impossible. */
 export function columnEnum(columns: ColumnRef[]) {
-  const ids = columns.map((c) => c.id);
-  return z.enum(ids.length > 0 ? (ids as [string, ...string[]]) : ["__none__"]);
+  const names = columns.map((c) => c.name);
+  return z.enum(names.length > 0 ? (names as [string, ...string[]]) : ["__none__"]);
 }
 
 function describeColumns(columns: ColumnRef[]) {
   if (columns.length === 0) return "(no columns loaded)";
-  return columns.map((c) => `${c.name} (${c.id})`).join(", ");
+  return columns.map((c) => c.name).join(", ");
 }
 
 export async function makeAlmadelTools(deps: ToolDeps) {
@@ -60,6 +60,12 @@ export async function makeAlmadelTools(deps: ToolDeps) {
   const manualColumns = columns.filter((c) => c.prompt === null);
   const manualColEnum = columnEnum(manualColumns);
   const manualColDesc = describeColumns(manualColumns);
+  const byName = new Map(columns.map((c) => [c.name, c.id]));
+  const columnIdFor = (name: string): string => {
+    const id = byName.get(name);
+    if (!id) throw new Error(`unknown column "${name}"`);
+    return id;
+  };
 
   return {
     almadel_join: {
@@ -121,7 +127,7 @@ export async function makeAlmadelTools(deps: ToolDeps) {
         const ticket = await client.createTicket(state.projectId, {
           title: args.title,
           body: args.body,
-          column_id: args.column,
+          column_id: columnIdFor(args.column),
         });
         return `created ticket ${ticket.id}`;
       },
@@ -149,6 +155,7 @@ export async function makeAlmadelTools(deps: ToolDeps) {
       },
       async execute(args: { column: string; note?: string }): Promise<string> {
         const ticket = requireTicket(state);
+        const columnId = columnIdFor(args.column);
         const worktree = state.currentWorktree;
         if (!worktree) {
           return "no worktree is currently prepared — nothing to commit";
@@ -181,7 +188,7 @@ export async function makeAlmadelTools(deps: ToolDeps) {
           return `move aborted: ${msg}`;
         }
         await client.move(ticket, {
-          column: args.column,
+          column: columnId,
           note: args.note,
           head_sha: headSha,
         });

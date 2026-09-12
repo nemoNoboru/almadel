@@ -47,7 +47,7 @@ describe("almadel_move", () => {
     } as unknown as AlmadelClient;
 
     const tools = await deps(client, state, git);
-    const result = await tools.almadel_move.execute({ column: "done" });
+    const result = await tools.almadel_move.execute({ column: "Done" });
     expect(result).toBe("ticket moved; stage complete");
 
     const addIdx = ops.findIndex((o) => o === "git add -A");
@@ -59,6 +59,7 @@ describe("almadel_move", () => {
     expect(pushIdx).toBeGreaterThan(commitIdx);
     expect(moveIdx).toBeGreaterThan(pushIdx);
     expect(ops[moveIdx] ?? "").toContain('"head_sha":"abc123"');
+    expect(ops[moveIdx] ?? "").toContain('"column":"done"');
   });
 
   test("aborts the move when commit throws, leaving the ticket in place", async () => {
@@ -85,7 +86,7 @@ describe("almadel_move", () => {
     } as unknown as AlmadelClient;
 
     const tools = await deps(client, state, git);
-    const result = await tools.almadel_move.execute({ column: "done" });
+    const result = await tools.almadel_move.execute({ column: "Done" });
     expect(moved).toBe(false);
     expect(comments.length).toBe(1);
     expect(result).toContain("move aborted");
@@ -109,8 +110,16 @@ describe("almadel_move", () => {
     } as unknown as AlmadelClient;
 
     const tools = await deps(client, state, git);
-    await tools.almadel_move.execute({ column: "done" });
+    await tools.almadel_move.execute({ column: "Done" });
     expect(ops.some((o) => o.includes("push"))).toBe(false);
     expect(ops.some((o) => o.startsWith("move "))).toBe(true);
+  });
+
+  test("column enum accepts names and rejects ids", async () => {
+    const state = createState();
+    const tools = await deps({} as unknown as AlmadelClient, state, gitFor(() => ({ stdout: "", stderr: "", exitCode: 0 })));
+    const colEnum = tools.almadel_move.args.column;
+    expect(colEnum.safeParse("Done").success).toBe(true);
+    expect(colEnum.safeParse("done").success).toBe(false);
   });
 });
