@@ -15,6 +15,7 @@ export interface Column {
   name: string
   position: number
   prompt: string | null // NULL = human gate
+  model: string | null
   next_column: string | null
   fail_column: string | null
   wip_limit: number | null

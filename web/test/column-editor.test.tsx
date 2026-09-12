@@ -23,6 +23,26 @@ describe("ColumnEditorDialog — pipeline", () => {
     fireEvent.click(screen.getByRole("button", { name: /save pipeline/i }))
     await waitFor(() => expect(updateColumns).toHaveBeenCalled())
   })
+
+  test("renders a model field for each column", () => {
+    renderWithApp(<ColumnEditorDialog open target="pipeline" onOpenChange={() => {}} />)
+    expect(screen.getAllByPlaceholderText("provider/model").length).toBe(columns.length)
+  })
+
+  test("saves the model field and nulls it when empty", async () => {
+    const updateColumns = vi.fn()
+    renderWithApp(
+      <ColumnEditorDialog open target="pipeline" onOpenChange={() => {}} />,
+      makeState({ updateColumns }),
+    )
+    const modelInput = screen.getAllByPlaceholderText("provider/model")[0]
+    fireEvent.change(modelInput, { target: { value: "anthropic/claude-opus-4-1" } })
+    fireEvent.click(screen.getByRole("button", { name: /save pipeline/i }))
+    await waitFor(() => expect(updateColumns).toHaveBeenCalled())
+    const saved = updateColumns.mock.calls[0][1] as Array<{ model: string | null }>
+    expect(saved.some((c) => c.model === "anthropic/claude-opus-4-1")).toBe(true)
+    expect(saved.some((c) => c.model === null)).toBe(true)
+  })
 })
 
 describe("ColumnEditorDialog — single column", () => {

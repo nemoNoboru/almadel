@@ -13,7 +13,7 @@ export interface JobContext {
   log: (msg: string) => void;
   logVerbose: (msg: string) => void;
   /** Called with a task prompt to dispatch into a session. */
-  dispatchPrompt: (prompt: string, ticket: string, branch: string) => Promise<void>;
+  dispatchPrompt: (prompt: string, ticket: string, branch: string, model: string | null) => Promise<void>;
   /** Called when a cancel job arrives. */
   onCancel: (ticket: string) => Promise<void>;
   /** Called with a reply text to inject (resolve pending ask or new message). */
@@ -133,7 +133,7 @@ async function handleTask(
 
   // Server has already rendered the prompt (template vars substituted). Send it
   // verbatim — the plugin must NOT re-render.
-  await ctx.dispatchPrompt(job.prompt, job.ticket, job.branch);
+  await ctx.dispatchPrompt(job.prompt, job.ticket, job.branch, job.model);
 }
 
 async function handlePermission(

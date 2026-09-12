@@ -124,6 +124,41 @@ describe("claim", () => {
       expect(job.branch).toBe(`run/${ticket.id}`)
     }
   })
+
+  test("the task job carries the column model when pinned", () => {
+    const db = testDb()
+    const agent = registerAgent(db, {
+      project: "almadel-api",
+      repo_root: "/srv/slots/1",
+      label: "laptop",
+      opencode_version: "1.5.0",
+      capabilities: { tools: true, permission_hook: true },
+    }, { minOpencodeVersion: "1.0.0", portBase: 8000, portBandWidth: 100 })
+
+    db.query("UPDATE columns SET model = ? WHERE id = ?").run("anthropic/claude-opus-4-1", "col-planning")
+    const ticket = createTicket(db, { project_id: "almadel-api", title: "x", column_id: "col-planning" })
+    claimNow(db, "almadel-api", agent.agent_id)
+    const job = makeTaskJob(db, getTicket(db, ticket.id)!, agent.agent_id)
+    expect(job.type).toBe("task")
+    if (job.type === "task") expect(job.model).toBe("anthropic/claude-opus-4-1")
+  })
+
+  test("the task job model is null when the column does not pin one", () => {
+    const db = testDb()
+    const agent = registerAgent(db, {
+      project: "almadel-api",
+      repo_root: "/srv/slots/1",
+      label: "laptop",
+      opencode_version: "1.5.0",
+      capabilities: { tools: true, permission_hook: true },
+    }, { minOpencodeVersion: "1.0.0", portBase: 8000, portBandWidth: 100 })
+
+    const ticket = createTicket(db, { project_id: "almadel-api", title: "x", column_id: "col-planning" })
+    claimNow(db, "almadel-api", agent.agent_id)
+    const job = makeTaskJob(db, getTicket(db, ticket.id)!, agent.agent_id)
+    expect(job.type).toBe("task")
+    if (job.type === "task") expect(job.model).toBeNull()
+  })
 })
 
 describe("registration", () => {

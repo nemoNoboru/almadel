@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { JobSchema, PermissionRequestSchema, moveTicketSchema } from "../../src/types.ts";
+import { ColumnSchema, JobSchema, PermissionRequestSchema, moveTicketSchema } from "../../src/types.ts";
 import { columnEnum } from "../../src/tools.ts";
+import { parseModel } from "../../src/index.ts";
 import { z } from "zod";
 
 describe("JobSchema", () => {
@@ -11,8 +12,23 @@ describe("JobSchema", () => {
       ticket: "t1",
       prompt: "do it",
       branch: "run/t1",
+      model: "anthropic/claude-opus-4-1",
     };
-    expect(JobSchema.parse(job).type).toBe("task");
+    const parsed = JobSchema.parse(job);
+    expect(parsed.type).toBe("task");
+    if (parsed.type === "task") expect(parsed.model).toBe("anthropic/claude-opus-4-1");
+  });
+
+  test("parses a task job with a null model", () => {
+    const job = JobSchema.parse({
+      type: "task",
+      project: "p",
+      ticket: "t",
+      prompt: "do it",
+      branch: "run/t",
+      model: null,
+    });
+    expect(job.type === "task" && job.model).toBeNull();
   });
 
   test("parses a reply job", () => {
@@ -41,6 +57,49 @@ describe("moveTicketSchema", () => {
   test("note capped at 2000", () => {
     expect(moveTicketSchema.safeParse({ column: "c", note: "x".repeat(2001) }).success).toBe(false);
     expect(moveTicketSchema.safeParse({ column: "c", note: "x".repeat(2000) }).success).toBe(true);
+  });
+});
+
+describe("ColumnSchema", () => {
+  test("accepts a null model", () => {
+    const col = ColumnSchema.parse({
+      id: "col-1",
+      project_id: "p",
+      name: "Planning",
+      prompt: null,
+      model: null,
+      position: 0,
+    });
+    expect(col.model).toBeNull();
+  });
+
+  test("accepts a pinned model", () => {
+    const col = ColumnSchema.parse({
+      id: "col-1",
+      project_id: "p",
+      name: "Implement",
+      prompt: "x",
+      model: "anthropic/claude-opus-4-1",
+      position: 1,
+    });
+    expect(col.model).toBe("anthropic/claude-opus-4-1");
+  });
+});
+
+describe("parseModel", () => {
+  test("splits a ref on the first slash", () => {
+    expect(parseModel("anthropic/claude-opus-4-1")).toEqual({
+      providerID: "anthropic",
+      modelID: "claude-opus-4-1",
+    });
+  });
+
+  test("handles a ref without a slash", () => {
+    expect(parseModel("claude-opus-4-1")).toEqual({ providerID: "claude-opus-4-1", modelID: "" });
+  });
+
+  test("returns undefined for null", () => {
+    expect(parseModel(null)).toBeUndefined();
   });
 });
 

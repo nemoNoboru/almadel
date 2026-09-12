@@ -156,5 +156,6 @@ export function makeTaskJob(db: DB, ticket: Ticket, agentId: string): Job {
     ticket: ticket.id,
     prompt,
     branch: ticket.branch ?? `run/${ticket.id}`,
+    model: column?.model ?? null,
   }
 }
