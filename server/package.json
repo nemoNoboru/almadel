@@ -5,6 +5,10 @@
   "private": true,
   "license": "MIT",
   "description": "Self-hosted control plane for coding agents — server, UI, SQLite, CLI.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nemoNoboru/almadel.git"
+  },
   "bin": {
     "almadel": "src/cli.ts"
   },
@@ -19,6 +23,7 @@
     "start": "bun run src/cli.ts",
     "dev": "bun --watch run src/cli.ts",
     "build:ui": "bun run scripts/build-ui.ts",
+    "build:cli": "bun build src/cli.ts --target bun --outdir dist",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },
