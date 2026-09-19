@@ -8,11 +8,13 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 
 use crate::agent::AgentSession;
 use crate::client::{Board, ClaimRequest, Client, ClientError, Job, Project, SlotTelemetry};
 use crate::config::Config;
+use crate::git::{self, Checkout, CommitMeta};
+use crate::runner;
 
 /// Sleep applied after a claim failure, doubled on each consecutive failure.
 const BACKOFF_BASE_MS: u64 = 1_000;
@@ -111,80 +113,184 @@ pub async fn handle_job(client: &Client, project: &Project, cfg: &Config, job: J
 }
 
 async fn handle_task(client: &Client, project: &Project, cfg: &Config, task: &Task) -> Outcome {
-    let run = run_opencode(cfg, &task.prompt, task.model.as_deref()).await;
-    match run {
-        Ok(()) => {
+    let workdir = cfg.workspace.join(&task.ticket);
+    info!(
+        ticket = %task.ticket,
+        branch = %task.branch,
+        workdir = %workdir.display(),
+        "preparing checkout"
+    );
+
+    let checkout = match git::prepare(
+        project.git_remote.as_deref(),
+        &project.default_branch,
+        &task.branch,
+        task.base_sha.as_deref(),
+        &workdir,
+    )
+    .await
+    {
+        Ok(c) => c,
+        Err(e) => {
+            warn!(ticket = %task.ticket, error = %e, "checkout prepare failed");
+            return fail_ticket(client, project, cfg, task, None, &format!("alimiel: {e}")).await;
+        }
+    };
+
+    let run = runner::run(
+        &cfg.opencode_bin,
+        &cfg.opencode_args,
+        task.model.as_deref(),
+        &task.prompt,
+        &checkout.path,
+    )
+    .await;
+
+    let outcome = match run {
+        Ok(output) if output.exit_code == 0 => {
             info!(ticket = %task.ticket, branch = %task.branch, "opencode succeeded");
-            let next = match resolve_column(client, project, &task.ticket, ColumnTarget::Next).await
-            {
-                Ok(Some(id)) => id,
-                Ok(None) => {
-                    warn!(ticket = %task.ticket, "no next_column; cannot release");
-                    return Outcome::Held;
-                }
-                Err(e) => {
-                    warn!(ticket = %task.ticket, error = %e, "could not resolve next column");
-                    return Outcome::Held;
-                }
-            };
-            if let Err(e) = client
-                .move_ticket(&task.ticket, &next, None, task.base_sha.as_deref())
-                .await
-            {
-                warn!(ticket = %task.ticket, column = %next, error = %e, "move to next column failed");
-                return Outcome::Held;
-            }
-            Outcome::Released
+            success_ticket(client, project, cfg, task, &checkout).await
         }
-        Err(reason) => {
-            warn!(ticket = %task.ticket, %reason, "opencode failed");
-            let body = format!("alimiel: {reason}");
-            if let Err(e) = client.comment(&task.ticket, "comment", Some(&body)).await {
-                warn!(ticket = %task.ticket, error = %e, "fail comment failed");
-            }
-            let fail = match resolve_column(client, project, &task.ticket, ColumnTarget::Fail).await
-            {
-                Ok(Some(id)) => id,
-                Ok(None) => {
-                    warn!(ticket = %task.ticket, "no fail_column; leaving ticket held");
-                    return Outcome::Held;
-                }
-                Err(e) => {
-                    warn!(ticket = %task.ticket, error = %e, "could not resolve fail column");
-                    return Outcome::Held;
-                }
-            };
-            if let Err(e) = client.move_ticket(&task.ticket, &fail, None, None).await {
-                warn!(ticket = %task.ticket, column = %fail, error = %e, "move to fail column failed");
-                return Outcome::Held;
-            }
-            Outcome::Released
+        Ok(output) => {
+            warn!(ticket = %task.ticket, code = output.exit_code, "opencode failed");
+            let body = format!(
+                "alimiel: opencode exited {}. tail:\n{}",
+                output.exit_code,
+                runner::stderr_tail(&output.stderr, 4000)
+            );
+            fail_ticket(client, project, cfg, task, Some(&checkout), &body).await
         }
-    }
+        Err(runner::RunnerError::Spawn(e)) => {
+            warn!(ticket = %task.ticket, error = %e, "opencode spawn failed");
+            let body = format!("alimiel: could not run opencode: {e}");
+            fail_ticket(client, project, cfg, task, Some(&checkout), &body).await
+        }
+        Err(runner::RunnerError::NonZero { code, stderr_tail }) => {
+            let body = format!("alimiel: opencode exited {code}. tail:\n{stderr_tail}");
+            fail_ticket(client, project, cfg, task, Some(&checkout), &body).await
+        }
+    };
+
+    git::cleanup(&checkout).await;
+    outcome
 }
 
-/// Spawn `opencode run [--model <model>] <args> <prompt>` in the workspace and
-/// capture the exit code. Returns `Err(reason)` on spawn failure or non-zero exit.
-async fn run_opencode(cfg: &Config, prompt: &str, model: Option<&str>) -> Result<(), String> {
-    let mut cmd = tokio::process::Command::new(&cfg.opencode_bin);
-    cmd.arg("run");
-    if let Some(model) = model {
-        cmd.arg("--model").arg(model);
-    }
-    cmd.args(&cfg.opencode_args);
-    cmd.arg(prompt);
-    cmd.current_dir(&cfg.workspace);
+/// The success path: commit + push, then move to the `next` column carrying the
+/// real HEAD SHA (plan §9 step 4). A failed commit/push must never become a
+/// clean move, so it falls through to the fail path (§13).
+async fn success_ticket(
+    client: &Client,
+    project: &Project,
+    cfg: &Config,
+    task: &Task,
+    checkout: &Checkout,
+) -> Outcome {
+    let (next_id, next_name) =
+        match resolve_column(client, project, &task.ticket, ColumnTarget::Next).await {
+            Ok(Some(col)) => col,
+            Ok(None) => {
+                warn!(ticket = %task.ticket, "no next_column; cannot release");
+                return Outcome::Held;
+            }
+            Err(e) => {
+                warn!(ticket = %task.ticket, error = %e, "could not resolve next column");
+                return Outcome::Held;
+            }
+        };
 
-    debug!(bin = %cfg.opencode_bin, "spawning opencode");
-    let status = cmd
-        .status()
+    let meta = CommitMeta {
+        ticket: task.ticket.clone(),
+        column: next_name,
+        label: cfg.label.clone(),
+        note: None,
+    };
+    let sha = match commit_and_push(project, task, checkout, &meta).await {
+        Ok(sha) => sha,
+        Err(e) => {
+            warn!(ticket = %task.ticket, error = %e, "commit/push failed");
+            return fail_ticket(client, project, cfg, task, None, &format!("alimiel: {e}")).await;
+        }
+    };
+
+    if let Err(e) = client
+        .move_ticket(&task.ticket, &next_id, None, Some(&sha))
         .await
-        .map_err(|e| format!("could not run opencode: {e}"))?;
+    {
+        warn!(ticket = %task.ticket, column = %next_id, error = %e, "move to next column failed");
+        return Outcome::Held;
+    }
+    Outcome::Released
+}
 
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!("opencode exited with {status}"))
+/// The failure path: best-effort commit + push of the failed work, comment the
+/// error, and move to the `fail` column (plan §9 step 4 else-branch).
+async fn fail_ticket(
+    client: &Client,
+    project: &Project,
+    cfg: &Config,
+    task: &Task,
+    checkout: Option<&Checkout>,
+    body: &str,
+) -> Outcome {
+    let (fail_id, fail_name) =
+        match resolve_column(client, project, &task.ticket, ColumnTarget::Fail).await {
+            Ok(Some(col)) => col,
+            Ok(None) => {
+                warn!(ticket = %task.ticket, "no fail_column; leaving ticket held");
+                return Outcome::Held;
+            }
+            Err(e) => {
+                warn!(ticket = %task.ticket, error = %e, "could not resolve fail column");
+                return Outcome::Held;
+            }
+        };
+
+    if let Some(checkout) = checkout {
+        let meta = CommitMeta {
+            ticket: task.ticket.clone(),
+            column: fail_name,
+            label: cfg.label.clone(),
+            note: None,
+        };
+        let _ = commit_and_push(project, task, checkout, &meta).await;
+    }
+
+    if let Err(e) = client.comment(&task.ticket, "comment", Some(body)).await {
+        warn!(ticket = %task.ticket, error = %e, "fail comment failed");
+    }
+
+    if let Err(e) = client.move_ticket(&task.ticket, &fail_id, None, None).await {
+        warn!(ticket = %task.ticket, column = %fail_id, error = %e, "move to fail column failed");
+        return Outcome::Held;
+    }
+    Outcome::Released
+}
+
+/// Commit all changes, push (when a remote is configured), and return the HEAD
+/// SHA to report in the move. Ordering mirrors the plugin's `almadel_move`:
+/// commit → push → move, so a ticket's work is reachable before the server can
+/// hand the next stage to another agent.
+async fn commit_and_push(
+    project: &Project,
+    task: &Task,
+    checkout: &Checkout,
+    meta: &CommitMeta,
+) -> Result<String, String> {
+    let committed = git::commit_all(checkout, meta)
+        .await
+        .map_err(|e| format!("commit failed: {e}"))?;
+
+    if project.git_remote.is_some() {
+        git::push(checkout, &task.branch)
+            .await
+            .map_err(|e| format!("push failed: {e}"))?;
+    }
+
+    match committed {
+        Some(sha) => Ok(sha),
+        None => git::head_sha(checkout)
+            .await
+            .map_err(|e| format!("head_sha failed: {e}")),
     }
 }
 
@@ -195,33 +301,34 @@ enum ColumnTarget {
     Fail,
 }
 
-/// Resolve the target column id for `ticket` by fetching the board and reading
+/// Resolve the target column for `ticket` by fetching the board and reading
 /// the current column's `next_column` / `fail_column` *name*, then mapping it
-/// back to an id. Returns `Ok(None)` when the ticket, its column, or the
+/// back to `(id, name)`. Returns `Ok(None)` when the ticket, its column, or the
 /// referenced column name cannot be found.
 async fn resolve_column(
     client: &Client,
     project: &Project,
     ticket_id: &str,
     target: ColumnTarget,
-) -> Result<Option<String>, ClientError> {
+) -> Result<Option<(String, String)>, ClientError> {
     let board = client.get_board(&project.id).await?;
     Ok(resolve_column_in(&board, ticket_id, target))
 }
 
 /// Pure helper over an already-fetched board (unit-testable).
-fn resolve_column_in(board: &Board, ticket_id: &str, target: ColumnTarget) -> Option<String> {
+fn resolve_column_in(
+    board: &Board,
+    ticket_id: &str,
+    target: ColumnTarget,
+) -> Option<(String, String)> {
     let ticket = board.tickets.iter().find(|t| t.id == ticket_id)?;
     let column = board.columns.iter().find(|c| c.id == ticket.column_id)?;
     let name = match target {
         ColumnTarget::Next => column.next_column.as_deref()?,
         ColumnTarget::Fail => column.fail_column.as_deref()?,
     };
-    board
-        .columns
-        .iter()
-        .find(|c| c.name == name)
-        .map(|c| c.id.clone())
+    let target = board.columns.iter().find(|c| c.name == name)?;
+    Some((target.id.clone(), target.name.clone()))
 }
 
 fn now_ms() -> i64 {
@@ -289,13 +396,11 @@ mod tests {
     #[test]
     fn resolves_next_and_fail_column_by_name() {
         let b = board();
+        assert_eq!(resolve_column_in(&b, "TCK-1", ColumnTarget::Next), None);
+        // "Review" not present in this minimal board
         assert_eq!(
-            resolve_column_in(&b, "TCK-1", ColumnTarget::Next).as_deref(),
-            None // "Review" not present in this minimal board
-        );
-        assert_eq!(
-            resolve_column_in(&b, "TCK-1", ColumnTarget::Fail).as_deref(),
-            Some("col-failed")
+            resolve_column_in(&b, "TCK-1", ColumnTarget::Fail),
+            Some(("col-failed".to_string(), "Failed".to_string()))
         );
     }
 

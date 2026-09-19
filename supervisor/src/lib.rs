@@ -6,4 +6,6 @@
 pub mod agent;
 pub mod client;
 pub mod config;
+pub mod git;
 pub mod poll;
+pub mod runner;

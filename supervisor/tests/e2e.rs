@@ -15,12 +15,12 @@ use tempfile::TempDir;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-fn board_body() -> serde_json::Value {
+fn board_body(git_remote: &Path) -> serde_json::Value {
     json!({
         "project": {
             "id": "p1",
             "name": "alpha",
-            "git_remote": null,
+            "git_remote": git_remote.to_string_lossy(),
             "default_branch": "main",
             "created_at": 1
         },
@@ -42,7 +42,7 @@ fn board_body() -> serde_json::Value {
     })
 }
 
-async fn mount_common_routes(server: &MockServer) {
+async fn mount_common_routes(server: &MockServer, git_remote: &Path) {
     Mock::given(method("GET"))
         .and(path("/api/projects"))
         .respond_with(
@@ -53,7 +53,7 @@ async fn mount_common_routes(server: &MockServer) {
 
     Mock::given(method("GET"))
         .and(path("/api/projects/p1/board"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(board_body()))
+        .respond_with(ResponseTemplate::new(200).set_body_json(board_body(git_remote)))
         .mount(server)
         .await;
 
@@ -110,6 +110,72 @@ fn fake_opencode(dir: &Path, exit_code: i32) -> PathBuf {
     script
 }
 
+/// Create a bare git remote with an initial `main` commit (via git2, so no git
+/// CLI is required). Returns the tempdir (kept alive) and the remote path.
+fn init_bare_remote() -> (TempDir, PathBuf) {
+    let tmp = TempDir::new().unwrap();
+    let src = tmp.path().join("src");
+    std::fs::create_dir_all(&src).unwrap();
+    let repo = git2::Repository::init(&src).unwrap();
+    repo.set_head("refs/heads/main").unwrap();
+    std::fs::write(src.join("README.md"), "hello\n").unwrap();
+    test_commit_all(&repo, "test", "test@example.com", "initial");
+
+    let bare = tmp.path().join("remote.git");
+    git2::Repository::init_bare(&bare).unwrap();
+    let mut remote = repo.remote("origin", bare.to_str().unwrap()).unwrap();
+    remote
+        .push(&["refs/heads/main:refs/heads/main"], None)
+        .unwrap();
+
+    (tmp, bare)
+}
+
+/// `git add -A` + commit against the repo's current HEAD (for test fixtures).
+fn test_commit_all(repo: &git2::Repository, name: &str, email: &str, msg: &str) {
+    let mut index = repo.index().unwrap();
+    index
+        .add_all(["."].iter(), git2::IndexAddOption::DEFAULT, None)
+        .unwrap();
+    index.update_all(["."].iter(), None).unwrap();
+    index.write().unwrap();
+    let tree_id = index.write_tree().unwrap();
+    let tree = repo.find_tree(tree_id).unwrap();
+    let sig = git2::Signature::now(name, email).unwrap();
+    let parent = repo
+        .head()
+        .ok()
+        .and_then(|h| h.target())
+        .and_then(|t| repo.find_commit(t).ok());
+    match parent {
+        Some(p) => repo
+            .commit(Some("HEAD"), &sig, &sig, msg, &tree, &[&p])
+            .unwrap(),
+        None => repo
+            .commit(Some("HEAD"), &sig, &sig, msg, &tree, &[])
+            .unwrap(),
+    };
+}
+
+/// A fake `opencode` that touches `marker.txt` in its cwd (the checkout) and
+/// exits 0.
+fn fake_opencode_touch(dir: &Path) -> PathBuf {
+    let script = dir.join("opencode-mock-touch");
+    std::fs::write(
+        &script,
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo \"opencode 1.18.30\"; exit 0; fi\n: > marker.txt\nexit 0\n",
+    )
+    .unwrap();
+    let mut perms = std::fs::metadata(&script).unwrap().permissions();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        perms.set_mode(0o755);
+    }
+    std::fs::set_permissions(&script, perms).unwrap();
+    script
+}
+
 fn config(server_uri: &str, workspace: &Path, opencode_bin: PathBuf) -> Config {
     Config {
         server: server_uri.to_string(),
@@ -134,7 +200,8 @@ async fn request_bodies(server: &MockServer, path: &str) -> Vec<serde_json::Valu
 #[tokio::test]
 async fn success_claims_runs_and_moves_to_next_column() {
     let server = MockServer::start().await;
-    mount_common_routes(&server).await;
+    let (_remote_dir, remote) = init_bare_remote();
+    mount_common_routes(&server, &remote).await;
     Mock::given(method("POST"))
         .and(path("/api/claim"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
@@ -145,7 +212,7 @@ async fn success_claims_runs_and_moves_to_next_column() {
         .await;
 
     let tmp = TempDir::new().unwrap();
-    let opencode = fake_opencode(tmp.path(), 0);
+    let opencode = fake_opencode_touch(tmp.path());
     let cfg = config(&server.uri(), tmp.path(), opencode);
 
     let mut client = Client::new(&server.uri()).unwrap();
@@ -176,12 +243,31 @@ async fn success_claims_runs_and_moves_to_next_column() {
     let moves = request_bodies(&server, "/api/tickets/TCK-1/move").await;
     assert_eq!(moves.len(), 1);
     assert_eq!(moves[0]["column"], "col-review");
+
+    // Acceptance: the work must be committed and pushed to the bare remote as
+    // `run/TCK-1`, and the move must carry the real head SHA (not base_sha).
+    let bare = git2::Repository::open_bare(&remote).unwrap();
+    let pushed = bare
+        .find_reference("refs/heads/run/TCK-1")
+        .unwrap()
+        .peel_to_commit()
+        .unwrap();
+    assert!(
+        pushed
+            .tree()
+            .unwrap()
+            .get_path(std::path::Path::new("marker.txt"))
+            .is_ok()
+    );
+    let sha = pushed.id().to_string();
+    assert_eq!(moves[0]["head_sha"], sha);
 }
 
 #[tokio::test]
 async fn failure_comments_and_moves_to_fail_column() {
     let server = MockServer::start().await;
-    mount_common_routes(&server).await;
+    let (_remote_dir, remote) = init_bare_remote();
+    mount_common_routes(&server, &remote).await;
 
     let tmp = TempDir::new().unwrap();
     let opencode = fake_opencode(tmp.path(), 1);
@@ -215,9 +301,9 @@ async fn failure_comments_and_moves_to_fail_column() {
 #[tokio::test]
 async fn non_task_jobs_are_ignored() {
     let server = MockServer::start().await;
-    mount_common_routes(&server).await;
-
     let tmp = TempDir::new().unwrap();
+    mount_common_routes(&server, tmp.path()).await;
+
     let opencode = fake_opencode(tmp.path(), 0);
     let cfg = config(&server.uri(), tmp.path(), opencode);
 
@@ -241,7 +327,8 @@ async fn opencode_spawn_failure_is_not_a_crash() {
     // A non-existent opencode binary must yield an error path (mark errored),
     // never a panic.
     let server = MockServer::start().await;
-    mount_common_routes(&server).await;
+    let (_remote_dir, remote) = init_bare_remote();
+    mount_common_routes(&server, &remote).await;
 
     let tmp = TempDir::new().unwrap();
     let cfg = config(&server.uri(), tmp.path(), tmp.path().join("does-not-exist"));
