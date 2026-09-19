@@ -68,6 +68,31 @@ async fn get_board_parses_board() {
 }
 
 #[tokio::test]
+async fn get_columns_parses_column_list() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/projects/p1/columns"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+            { "id": "col-planning", "project_id": "p1", "name": "Planning", "position": 1,
+              "prompt": "plan {{ticket.id}}", "model": null,
+              "next_column": "Review", "fail_column": "Failed", "wip_limit": null },
+            { "id": "col-failed", "project_id": "p1", "name": "Failed", "position": 3,
+              "prompt": null, "model": null, "next_column": null, "fail_column": null, "wip_limit": null }
+        ])))
+        .mount(&server)
+        .await;
+
+    let client = Client::new(&server.uri()).unwrap();
+    let columns = client.get_columns("p1").await.unwrap();
+    assert_eq!(columns.len(), 2);
+    assert_eq!(columns[0].id, "col-planning");
+    assert_eq!(columns[0].name, "Planning");
+    assert_eq!(columns[0].next_column.as_deref(), Some("Review"));
+    assert_eq!(columns[0].fail_column.as_deref(), Some("Failed"));
+    assert_eq!(columns[1].name, "Failed");
+}
+
+#[tokio::test]
 async fn register_posts_body_and_parses_result() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))

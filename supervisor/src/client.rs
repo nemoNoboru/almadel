@@ -305,6 +305,14 @@ impl Client {
         Ok(resp.json().await?)
     }
 
+    /// `GET /api/projects/{id}/columns` → the ordered column list.
+    pub async fn get_columns(&self, project_id: &str) -> Result<Vec<Column>, ClientError> {
+        let path = format!("api/projects/{project_id}/columns");
+        let resp = self.http.get(self.url(&path)).send().await?;
+        let resp = self.check(resp).await?;
+        Ok(resp.json().await?)
+    }
+
     /// `POST /api/agents` → `{ agent_id, name, token, port_base }`.
     pub async fn register(&self, reg: &Registration) -> Result<RegistrationResult, ClientError> {
         let resp = self

@@ -11,7 +11,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{info, warn};
 
 use crate::agent::AgentSession;
-use crate::client::{Board, ClaimRequest, Client, ClientError, Job, Project, SlotTelemetry};
+use crate::client::{ClaimRequest, Client, Job, Project, SlotTelemetry};
+use crate::columns::{self, Target};
 use crate::config::Config;
 use crate::git::{self, Checkout, CommitMeta};
 use crate::runner;
@@ -186,7 +187,7 @@ async fn success_ticket(
     checkout: &Checkout,
 ) -> Outcome {
     let (next_id, next_name) =
-        match resolve_column(client, project, &task.ticket, ColumnTarget::Next).await {
+        match columns::resolve(client, project, &task.ticket, Target::Next).await {
             Ok(Some(col)) => col,
             Ok(None) => {
                 warn!(ticket = %task.ticket, "no next_column; cannot release");
@@ -212,8 +213,9 @@ async fn success_ticket(
         }
     };
 
+    let note = format!("committed {sha}");
     if let Err(e) = client
-        .move_ticket(&task.ticket, &next_id, None, Some(&sha))
+        .move_ticket(&task.ticket, &next_id, Some(&note), Some(&sha))
         .await
     {
         warn!(ticket = %task.ticket, column = %next_id, error = %e, "move to next column failed");
@@ -233,7 +235,7 @@ async fn fail_ticket(
     body: &str,
 ) -> Outcome {
     let (fail_id, fail_name) =
-        match resolve_column(client, project, &task.ticket, ColumnTarget::Fail).await {
+        match columns::resolve(client, project, &task.ticket, Target::Fail).await {
             Ok(Some(col)) => col,
             Ok(None) => {
                 warn!(ticket = %task.ticket, "no fail_column; leaving ticket held");
@@ -294,119 +296,9 @@ async fn commit_and_push(
     }
 }
 
-/// Which outgoing column to resolve for a ticket.
-#[derive(Debug, Clone, Copy)]
-enum ColumnTarget {
-    Next,
-    Fail,
-}
-
-/// Resolve the target column for `ticket` by fetching the board and reading
-/// the current column's `next_column` / `fail_column` *name*, then mapping it
-/// back to `(id, name)`. Returns `Ok(None)` when the ticket, its column, or the
-/// referenced column name cannot be found.
-async fn resolve_column(
-    client: &Client,
-    project: &Project,
-    ticket_id: &str,
-    target: ColumnTarget,
-) -> Result<Option<(String, String)>, ClientError> {
-    let board = client.get_board(&project.id).await?;
-    Ok(resolve_column_in(&board, ticket_id, target))
-}
-
-/// Pure helper over an already-fetched board (unit-testable).
-fn resolve_column_in(
-    board: &Board,
-    ticket_id: &str,
-    target: ColumnTarget,
-) -> Option<(String, String)> {
-    let ticket = board.tickets.iter().find(|t| t.id == ticket_id)?;
-    let column = board.columns.iter().find(|c| c.id == ticket.column_id)?;
-    let name = match target {
-        ColumnTarget::Next => column.next_column.as_deref()?,
-        ColumnTarget::Fail => column.fail_column.as_deref()?,
-    };
-    let target = board.columns.iter().find(|c| c.name == name)?;
-    Some((target.id.clone(), target.name.clone()))
-}
-
 fn now_ms() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
         .unwrap_or(0)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::client::{Board, Column, Project, Ticket};
-
-    fn board() -> Board {
-        Board {
-            project: Project {
-                id: "p".into(),
-                name: "p".into(),
-                git_remote: None,
-                default_branch: "main".into(),
-                created_at: 0,
-            },
-            columns: vec![
-                Column {
-                    id: "col-planning".into(),
-                    project_id: "p".into(),
-                    name: "Planning".into(),
-                    position: 1,
-                    prompt: Some("plan".into()),
-                    model: None,
-                    next_column: Some("Review".into()),
-                    fail_column: Some("Failed".into()),
-                    wip_limit: None,
-                },
-                Column {
-                    id: "col-failed".into(),
-                    project_id: "p".into(),
-                    name: "Failed".into(),
-                    position: 6,
-                    prompt: None,
-                    model: None,
-                    next_column: None,
-                    fail_column: None,
-                    wip_limit: None,
-                },
-            ],
-            tickets: vec![Ticket {
-                id: "TCK-1".into(),
-                project_id: "p".into(),
-                title: "t".into(),
-                body: None,
-                column_id: "col-planning".into(),
-                state: "running".into(),
-                branch: Some("run/TCK-1".into()),
-                head_sha: None,
-                agent_id: Some("agt_1".into()),
-                priority: 0,
-                claimed_at: None,
-                created_at: 0,
-            }],
-        }
-    }
-
-    #[test]
-    fn resolves_next_and_fail_column_by_name() {
-        let b = board();
-        assert_eq!(resolve_column_in(&b, "TCK-1", ColumnTarget::Next), None);
-        // "Review" not present in this minimal board
-        assert_eq!(
-            resolve_column_in(&b, "TCK-1", ColumnTarget::Fail),
-            Some(("col-failed".to_string(), "Failed".to_string()))
-        );
-    }
-
-    #[test]
-    fn missing_ticket_or_column_returns_none() {
-        let b = board();
-        assert_eq!(resolve_column_in(&b, "TCK-999", ColumnTarget::Next), None);
-    }
 }

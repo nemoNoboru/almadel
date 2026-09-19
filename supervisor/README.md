@@ -4,14 +4,14 @@ The Almadel supervisor: an out-of-process Rust worker that polls the Almadel
 server and runs each ticket in a throwaway checkout. It replaces the
 git/branch/dispatch half of the in-process opencode plugin.
 
-Status: **Phase 2** — git lifecycle (clone/branch/commit/push) and the opencode
-runner are in place (TCK-440). Each task clones the project's `git_remote` into
-`<workspace>/<ticket>`, checks out a `run/<ticket>` branch from the default
-branch, runs `opencode run`, then commits the result with a deterministic
-identity (`almadel[<label>] <agent@almadel.local>`) and pushes it back to
-`origin`. On success the ticket moves to its `next_column` carrying the real
-head SHA; on failure it is commented and moved to its `fail_column`. Column
-resolution and the move/comment cycle are wired (TCK-441). Remaining work
+Status: **Phase 3** — column resolution, move, and comment are wired (TCK-441).
+Each task clones the project's `git_remote` into `<workspace>/<ticket>`, checks
+out a `run/<ticket>` branch from the default branch, runs `opencode run`, then
+commits the result with a deterministic identity (`almadel[<label>]
+<agent@almadel.local>`) and pushes it back to `origin`. On success the ticket
+moves to its `next_column` (resolved by name via the columns endpoint) carrying
+the real head SHA and a note; on failure it is commented and moved to its
+`fail_column` (falling back to the current column when unset). Remaining work
 (base-SHA reachability handling TCK-442, git credential minting TCK-444, and
 the executor/native-harness seam TCK-443) lands in later phases. See
 `plan/alimiel.md` for the full design.

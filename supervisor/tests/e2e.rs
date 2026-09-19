@@ -15,6 +15,18 @@ use tempfile::TempDir;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
+fn columns_body() -> serde_json::Value {
+    json!([
+        { "id": "col-planning", "project_id": "p1", "name": "Planning", "position": 1,
+          "prompt": "plan {{ticket.id}}", "model": null,
+          "next_column": "Review", "fail_column": "Failed", "wip_limit": null },
+        { "id": "col-review", "project_id": "p1", "name": "Review", "position": 2,
+          "prompt": null, "model": null, "next_column": null, "fail_column": null, "wip_limit": null },
+        { "id": "col-failed", "project_id": "p1", "name": "Failed", "position": 3,
+          "prompt": null, "model": null, "next_column": null, "fail_column": null, "wip_limit": null }
+    ])
+}
+
 fn board_body(git_remote: &Path) -> serde_json::Value {
     json!({
         "project": {
@@ -24,15 +36,7 @@ fn board_body(git_remote: &Path) -> serde_json::Value {
             "default_branch": "main",
             "created_at": 1
         },
-        "columns": [
-            { "id": "col-planning", "project_id": "p1", "name": "Planning", "position": 1,
-              "prompt": "plan {{ticket.id}}", "model": null,
-              "next_column": "Review", "fail_column": "Failed", "wip_limit": null },
-            { "id": "col-review", "project_id": "p1", "name": "Review", "position": 2,
-              "prompt": null, "model": null, "next_column": null, "fail_column": null, "wip_limit": null },
-            { "id": "col-failed", "project_id": "p1", "name": "Failed", "position": 3,
-              "prompt": null, "model": null, "next_column": null, "fail_column": null, "wip_limit": null }
-        ],
+        "columns": columns_body(),
         "tickets": [
             { "id": "TCK-1", "project_id": "p1", "title": "do work", "body": null,
               "column_id": "col-planning", "state": "running", "branch": "run/TCK-1",
@@ -54,6 +58,12 @@ async fn mount_common_routes(server: &MockServer, git_remote: &Path) {
     Mock::given(method("GET"))
         .and(path("/api/projects/p1/board"))
         .respond_with(ResponseTemplate::new(200).set_body_json(board_body(git_remote)))
+        .mount(server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/api/projects/p1/columns"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(columns_body()))
         .mount(server)
         .await;
 
@@ -176,6 +186,26 @@ fn fake_opencode_touch(dir: &Path) -> PathBuf {
     script
 }
 
+/// A fake `opencode` that touches `marker.txt` then deletes the checkout's
+/// `.git` directory and exits 0 — so the success path's commit step fails,
+/// forcing the commit/push-failure route to the fail column.
+fn fake_opencode_break_repo(dir: &Path) -> PathBuf {
+    let script = dir.join("opencode-mock-break");
+    std::fs::write(
+        &script,
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo \"opencode 1.18.30\"; exit 0; fi\n: > marker.txt\nrm -rf .git\nexit 0\n",
+    )
+    .unwrap();
+    let mut perms = std::fs::metadata(&script).unwrap().permissions();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        perms.set_mode(0o755);
+    }
+    std::fs::set_permissions(&script, perms).unwrap();
+    script
+}
+
 fn config(server_uri: &str, workspace: &Path, opencode_bin: PathBuf) -> Config {
     Config {
         server: server_uri.to_string(),
@@ -261,6 +291,7 @@ async fn success_claims_runs_and_moves_to_next_column() {
     );
     let sha = pushed.id().to_string();
     assert_eq!(moves[0]["head_sha"], sha);
+    assert_eq!(moves[0]["note"], format!("committed {sha}"));
 }
 
 #[tokio::test]
@@ -351,5 +382,42 @@ async fn opencode_spawn_failure_is_not_a_crash() {
             .contains("could not run opencode")
     );
     let moves = request_bodies(&server, "/api/tickets/TCK-1/move").await;
+    assert_eq!(moves[0]["column"], "col-failed");
+}
+
+#[tokio::test]
+async fn commit_failure_comments_and_moves_to_fail_column() {
+    // A commit failure on the success path (opencode exits 0 but the checkout's
+    // `.git` is gone) must route to the fail column with an error comment and
+    // never a forward move (plan §13 invariant: commit → push → move).
+    let server = MockServer::start().await;
+    let (_remote_dir, remote) = init_bare_remote();
+    mount_common_routes(&server, &remote).await;
+
+    let tmp = TempDir::new().unwrap();
+    let opencode = fake_opencode_break_repo(tmp.path());
+    let cfg = config(&server.uri(), tmp.path(), opencode);
+
+    let mut client = Client::new(&server.uri()).unwrap();
+    let project = agent::resolve_project(&client, "alpha").await.unwrap();
+    let session = agent::register(&client, &project, &cfg).await.unwrap();
+    client.set_token(session.token.expose());
+
+    let outcome = poll::handle_job(&client, &project, &cfg, task_job()).await;
+    assert_eq!(outcome, Outcome::Released);
+
+    let comments = request_bodies(&server, "/api/tickets/TCK-1/comment").await;
+    assert_eq!(comments.len(), 1);
+    assert!(
+        comments[0]["body"]
+            .as_str()
+            .unwrap()
+            .contains("commit failed"),
+        "unexpected comment body: {}",
+        comments[0]["body"]
+    );
+
+    let moves = request_bodies(&server, "/api/tickets/TCK-1/move").await;
+    assert_eq!(moves.len(), 1);
     assert_eq!(moves[0]["column"], "col-failed");
 }
