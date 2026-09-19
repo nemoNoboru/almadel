@@ -4,9 +4,11 @@ The Almadel supervisor: an out-of-process Rust worker that polls the Almadel
 server and runs each ticket in a throwaway checkout. It replaces the
 git/branch/dispatch half of the in-process opencode plugin.
 
-Status: **Phase 0** — crate scaffold, configuration, and logging only. No HTTP
-client, poll loop, git, or runner yet (those land in TCK-439 … TCK-443). See
-`plan/alimiel.md` for the full design.
+Status: **Phase 1** — HTTP client, project resolution, agent registration, and
+the claim/task loop. Tasks are run through `opencode` and moved to the next
+column on success or commented + moved to the fail column on error. Git and the
+full runner land in later phases (TCK-440 … TCK-443). See `plan/alimiel.md` for
+the full design.
 
 ## Build & test
 
