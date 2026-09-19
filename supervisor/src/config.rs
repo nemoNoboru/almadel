@@ -178,7 +178,7 @@ mod tests {
         }
 
         fn var_os(&self, key: &str) -> Option<OsString> {
-            self.0.get(key).map(|v| OsString::from(v))
+            self.0.get(key).map(OsString::from)
         }
     }
 
