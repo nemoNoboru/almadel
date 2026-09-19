@@ -55,3 +55,33 @@ jobs:
 
       - name: Test
         run: bun test
+
+  supervisor:
+    name: supervisor (rust)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: supervisor
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: supervisor
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Lint
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test
+
+      - name: Build
+        run: cargo build --release
